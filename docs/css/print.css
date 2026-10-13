@@ -1,0 +1,34 @@
+/* ===== Print stylesheet (linked with media="print") — Admin-UI builder =====
+   Sheet sizes are defined in admin.css (mm); here only paper setup and hiding the app chrome.
+   A named page keeps the A4/10 mm setup away from other pages' printouts. */
+@page cs2sheet { size: A4 portrait; margin: 10mm; }
+
+.tabbar, .toasts, .no-print, dialog { display: none !important; }
+
+/* #/print/* — only the sheets */
+body[data-page="print"] { background: #fff !important; padding: 0 !important; margin: 0; }
+body[data-page="print"] .topbar,
+body[data-page="print"] .footer,
+body[data-page="print"] .banners,
+body[data-page="print"] .skip,
+body[data-page="print"] .pr-toolbar,
+body[data-page="print"] .card.warn { display: none !important; }
+body[data-page="print"] .wrap { max-width: none; margin: 0; padding: 0; }
+.pr-doc { display: block; overflow: visible; padding: 0; }
+.pr-sheet { page: cs2sheet; width: auto; min-height: 0; padding: 0; margin: 0; box-shadow: none; break-after: page; }
+.pr-sheet:last-child { break-after: auto; }
+.pr-site { min-height: 270mm; padding-top: 6mm; }
+.pr-sheet, .pr-sheet * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+.pr-cell, .pr-grid { break-inside: avoid; }
+
+/* #/admin printed directly (Ctrl+P): plain content without app chrome */
+body[data-page="admin"] { background: #fff; padding: 0; }
+body[data-page="admin"] .topbar,
+body[data-page="admin"] .banners,
+body[data-page="admin"] .footer,
+body[data-page="admin"] .adm-tabs,
+body[data-page="admin"] .adm-vaultbar,
+body[data-page="admin"] .adm-stale,
+body[data-page="admin"] .btn { display: none !important; }
+body[data-page="admin"] .card, body[data-page="admin"] .adm-team, body[data-page="admin"] .adm-match { box-shadow: none; break-inside: avoid; }
+body[data-page="admin"] .adm-grid-wrap { max-height: none; overflow: visible; }

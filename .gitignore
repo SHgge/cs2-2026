@@ -1,0 +1,10 @@
+# Хувийн/дотоод мэдээлэл repo-д орохгүй
+private/
+*.csv
+*.xlsx
+*.env
+.env*
+node_modules/
+tests/output/
+playwright-report/
+test-results/
