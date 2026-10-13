@@ -120,7 +120,7 @@ Error codes: `bad_token`, `expired`, `closed`, `locked`, `pin_required`, `pin_wr
   - `announce {text, level:'info'|'warn'}` · `announce_hide {id}`
   - `tokens_issue {kind:'class', team_id}` → `{token, pin}` · `{kind:'class_all'}` → `{items:[{team_id,code,name,token,pin}]}` (rotates all) · `{kind:'referee', station:'A'|'B'|null, label}` → `{token}` — plaintext returned ONCE, only hashes stored.
   - `pin_reset {team_id}` → `{pin}`
-  - `export {kind:'roster'|'consent'|'results'|'matchzy'}` → `{columns, rows}` (matchzy → `{teams:{code:{name, players:{steam_id64: display}}}}`; display = alias if consent_3b false, else `steam_nickname`)
+  - `export {kind:'roster'|'consent'|'results'|'matchzy'}` → `{columns, rows}` (matchzy → `{teams:{code:{name, players:{steam_id64: display}}}}`; display = `steam_nickname` only if `consent_3a` AND `consent_3b` are true, else alias, fallback «<анги>-Тоглогч<slot>» / «Багш-Тоглогч<slot>» — migration 11)
   - `draw_commit {commit}` (64 hex) · `draw_compute {secret, inputs:{code:n}}` (verifies sha256(secret)==commit, computes per §3, status `computed`) · `draw_publish {}` (status `published`, writes seats; once) · `draw_void {reason}` (allowed only if no group match reported) · `draw_manual {groups:{A:[code×3],…}, reason}` (physical-lot fallback, published directly)
   - `match_result {no, score_a, score_b, forfeit, ot, team_a, team_b, status:'reported'|'final'}` · `match_update {no, start?, station?, status?}`
   - `group_lot {grp, order:[teamIds], reason}` · `group_approve {grp, approved}`

@@ -23,7 +23,7 @@ const STEPS_STUDENT = [
 const STEPS_ADULT = [
   'QR-ийг утасныхаа камераар уншуулна уу.',
   '6 тоглогчийн мэдээллийг бөглөнө үү (5 үндсэн + 1 нөөц).',
-  'PIN кодоор баталгаажуулна уу.',
+  'Багийн ахлагч PIN кодоор баталгаажуулна уу.',
 ];
 const STEPS_REF = [
   'QR-ийг утсаараа уншуулна уу.',
@@ -47,13 +47,14 @@ function classCard(qr, it, deadline) {
 }
 
 function pinSlip(it, deadline) {
+  const t = it.is_teachers; // «Багш нарын баг»: the PIN goes to the team captain
   return h('article', { class: 'pr-cell pr-pin' },
-    h('div', { class: 'pr-top' }, h('span', {}, TITLE), h('span', {}, 'Зөвхөн багшид')),
+    h('div', { class: 'pr-top' }, h('span', {}, TITLE), h('span', {}, t ? 'Зөвхөн багийн ахлагчид' : 'Зөвхөн багшид')),
     h('div', { class: 'pr-pin-line' },
       h('b', { class: 'pr-pin-team' }, it.name), h('span', { class: 'pr-dot' }, '·'),
-      h('span', {}, it.is_teachers ? 'PIN:' : 'Багшийн PIN:'), h('b', { class: 'pr-pin-code' }, it.pin)),
-    h('div', { class: 'pr-pin-warn' }, 'Сурагчдад бүү өгнө үү.'),
-    h('p', { class: 'pr-pin-note' }, `Сурагчид мэдээллээ бөглөсний дараа энэ PIN-ээр батална уу. Хугацаа: ${deadline}. 5 удаа буруу оруулбал 15 минут түгжигдэнэ.`));
+      h('span', {}, t ? 'Ахлагчийн PIN:' : 'Багшийн PIN:'), h('b', { class: 'pr-pin-code' }, it.pin)),
+    h('div', { class: 'pr-pin-warn' }, t ? 'Бусдад бүү өгнө үү.' : 'Сурагчдад бүү өгнө үү.'),
+    h('p', { class: 'pr-pin-note' }, `${t ? 'Багийн мэдээллийг бөглөсний дараа ахлагч' : 'Сурагчид мэдээллээ бөглөсний дараа'} энэ PIN-ээр батална уу. Хугацаа: ${deadline}. 5 удаа буруу оруулбал 15 минут түгжигдэнэ.`));
 }
 
 function refSlip(qr, r) {
@@ -68,7 +69,7 @@ function refSlip(qr, r) {
 }
 
 function buildCards(qr) {
-  const items = vault.classes().filter((i) => i.token && !i.hidden);
+  const items = vault.printable('token');
   if (!items.length) return { empty: NO_CODES };
   const deadline = deadlineText();
   return {
@@ -78,7 +79,7 @@ function buildCards(qr) {
 }
 
 function buildPins() {
-  const items = vault.classes().filter((i) => i.pin && !i.hidden);
+  const items = vault.printable('pin');
   if (!items.length) return { empty: NO_CODES };
   const deadline = deadlineText();
   return {
@@ -118,7 +119,7 @@ function buildSecret() {
     sheets: [sheet('pr-secret',
       h('div', { class: 'pr-top' }, h('span', {}, TITLE), h('span', {}, 'Нууц — битүүмжилнэ')),
       h('h1', {}, 'Сугалааны нууц тоо'),
-      h('p', {}, 'Сугалаа: 10.22 (Пү) 16:00, техникийн хурал'),
+      h('p', {}, 'Сугалаа: 10.22 (Пү) 16:00, техникийн зөвлөгөөн'),
       h('div', { class: 'pr-secret-box' }, secretGroups(d.secret, 8)),
       h('p', { class: 'pr-secret-commit' }, h('b', {}, 'Commit (нийтэд ил): '), h('span', {}, d.commit)),
       h('p', {}, `Үүсгэсэн: ${shortDateTime(d.at)}`),

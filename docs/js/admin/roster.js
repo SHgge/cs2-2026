@@ -2,7 +2,7 @@
 import { h, toast, fmtDateTime } from '../ui.js';
 import { btn, section, chip, confirmDialog } from './core.js';
 import {
-  rosterCheck, isBlankPlayer, fieldErrorText, isoToLocalInput, localInputToIso, isFuture, playerId,
+  rosterCheck, isBlankPlayer, fieldErrorText, validationText, isoToLocalInput, localInputToIso, isFuture, playerId,
 } from './util.js';
 
 const FIELDS = [
@@ -121,20 +121,21 @@ function editor(ctx, t) {
   const summary = h('p', { class: 'field-error', role: 'alert' });
   const showErrors = (list) => {
     for (const r of rows) for (const k of Object.keys(r.errs)) { r.errs[k].textContent = ''; if (r.cells[k]) r.cells[k].classList.remove('input-error'); }
+    const other = [];
     for (const e of list || []) {
       const r = rows.find((x) => x.slot === e.slot);
-      if (!r || !r.errs[e.field]) continue;
+      if (!r || !r.errs[e.field]) { other.push(e); continue; }
       r.errs[e.field].textContent = fieldErrorText(e.field, e.code);
       if (r.cells[e.field]) r.cells[e.field].classList.add('input-error');
     }
-    summary.textContent = list && list.length ? 'Улаан талбаруудыг засна уу.' : '';
+    summary.textContent = !list || !list.length ? '' : other.length ? `${validationText(other)}.` : 'Улаан талбаруудыг засна уу.';
   };
 
   const save = btn('Хадгалах', async () => {
     const players = rows.map((r) => ({
       slot: r.slot,
       first_name: r.cells.first_name.value.trim(),
-      surname_initial: r.cells.surname_initial.value.trim(),
+      surname_initial: r.cells.surname_initial.value.trim().replace(/\.+$/, '').toUpperCase(),
       steam_nickname: r.cells.steam_nickname.value.trim(),
       steam_id64: r.cells.steam_id64.value.trim() || null,
       is_captain: r.cap.checked,
@@ -151,7 +152,7 @@ function editor(ctx, t) {
     const payload = players.map(({ _id, ...p }) => (_id != null ? { id: _id, ...p } : p));
     const r = await ctx.call('team_save', { team_id: t.id, players: payload, expected_version: t.version });
     if (r.ok) {
-      toast(t.confirmed_at ? 'Хадгаллаа. Баталгаа цуцлагдсан байж болно — шалгана уу.' : 'Хадгаллаа', 'ok');
+      toast(r.unconfirmed ? 'Хадгаллаа. Шаардлага хангахгүй болсон тул баталгаа цуцлагдлаа.' : 'Хадгаллаа', r.unconfirmed ? 'warn' : 'ok', 5000);
       ctx.setDirty(false);
       await ctx.reload();
     } else if (r.error === 'validation' && Array.isArray(r.errors)) {

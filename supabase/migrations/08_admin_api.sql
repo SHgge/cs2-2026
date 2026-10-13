@@ -4,7 +4,14 @@
 -- Also redefines three helpers of cs2_04/cs2_07:
 --   cs2.valid_score  — exact mirror of docs/js/logic.js validScore (unknown stage -> false even with a forfeit);
 --   cs2.match_set    — a group result needs the published draw (seats), else {ok:false,error:'draw_state'};
+--                      forfeit '' / 'false' = none (as validScore); scores above 999 -> invalid_score (smallint-safe);
 --   cs2.roster_parse — more than 12 cards -> {slot:null, field:'players', code:'too_many'} (bounded work per call).
+-- And replaces the stream_url check of cs2_02: its regex '{1,300}' is invalid in Postgres (repetition count
+-- max 255), so ANY non-null stream_url raised 2201B. Same rule, valid form: https://, no whitespace, <= 308 chars.
+
+alter table cs2.settings drop constraint if exists settings_stream_url_check;
+alter table cs2.settings add constraint settings_stream_url_check
+  check (stream_url is null or (stream_url ~ '^https://[^[:space:]]+$' and char_length(stream_url) <= 308));
 
 -- ---------------------------------------------------------------- roster validation (CONTRACT §4)
 -- Returns {errors:[{slot,field,code}], players:[normalised]}. Empty cards are skipped.
@@ -146,7 +153,7 @@ declare
   m         cs2.matches;
   v_a       integer := p_a;
   v_b       integer := p_b;
-  v_f       text := nullif(lower(btrim(coalesce(p_forfeit, ''))), '');
+  v_f       text := nullif(nullif(lower(btrim(coalesce(p_forfeit, ''))), ''), 'false');   -- '' / 'false' = none (as validScore)
   v_ta      integer;
   v_tb      integer;
   v_changed boolean;
@@ -187,7 +194,7 @@ begin
     if v_a is null and v_b is null and v_f is null and p_status = 'final' and m.score_a is not null then
       v_a := m.score_a; v_b := m.score_b; v_f := m.forfeit;          -- finalise the reported result
     end if;
-    if not cs2.valid_score(m.stage, v_a, v_b, v_f) then
+    if not cs2.valid_score(m.stage, v_a, v_b, v_f) or greatest(v_a, v_b) > 999 then   -- 999: smallint-safe bound
       return cs2.err('invalid_score');
     end if;
     if m.stage = 'group' then                                        -- seats are authoritative
@@ -433,7 +440,7 @@ begin
   end if;
   if p_args ? 'stream_url' then
     v_url := nullif(btrim(coalesce(p_args ->> 'stream_url', '')), '');
-    if v_url is not null and v_url !~ '^https://[^[:space:]]{1,300}$' then
+    if v_url is not null and (v_url !~ '^https://[^[:space:]]+$' or char_length(v_url) > 308) then
       v_errs := v_errs || jsonb_build_array(cs2.verr('stream_url', 'invalid'));
     end if;
   end if;

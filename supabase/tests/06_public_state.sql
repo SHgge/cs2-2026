@@ -15,7 +15,7 @@ declare
 begin
   -- marker data in a real team (1 = 12а) and in the hidden test team
   perform cs2.roster_write(1, '[{"slot":1,"first_name":"Zorigmarker","surname_initial":"Q","steam_nickname":"12а | NickMarkerA","steam_id64":"76561190000000101","is_captain":true,"age13":true},
-                                {"slot":2,"first_name":"Second","surname_initial":"S","steam_nickname":"12а | NickMarkerB","age13":true}]');
+                                {"slot":2,"first_name":"Second","surname_initial":"S","steam_nickname":"12а | NickMarkerB","is_captain":false,"age13":true}]');
   perform cs2.roster_write(99, '[{"slot":1,"first_name":"Hiddenmarker","surname_initial":"W","steam_nickname":"ТЕСТ | NickMarkerT","steam_id64":"76561190000000199","is_captain":true,"age13":true}]');
   update cs2.players set alias = 'AliasMarker', consent_paper = true, consent_3b = false where team_id = 1 and slot = 1;
   update cs2.team_access set confirmed_at = now(), confirmed_by = 'teacher' where team_id in (1, 99);

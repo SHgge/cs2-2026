@@ -127,10 +127,10 @@ begin
 
   -- 7. injection strings are data, huge inputs are rejected cleanly
   r := cs2_api.class_save(c_tok, jsonb_build_object('expected_version', v + 2, 'players', jsonb_build_array(
-         jsonb_build_object('slot', 1, 'first_name', 'Robert''); drop table cs2.players;--', 'surname_initial', 'T',
+         jsonb_build_object('slot', 1, 'first_name', 'Bob''; drop table x;--', 'surname_initial', 'T',
                             'steam_nickname', 'x''); delete from cs2.teams;--'))));
   assert r ->> 'error' = 'validation' and r -> 'errors' @> '[{"slot":1,"field":"first_name","code":"invalid"}]',
-         'quotes in a name are invalid';
+         'quotes in a name are invalid: ' || r::text;
   r := cs2_api.class_save(c_tok, jsonb_build_object('expected_version', v + 2, 'players', jsonb_build_array(
          jsonb_build_object('slot', 1, 'first_name', 'Robert', 'surname_initial', 'T',
                             'steam_nickname', 'x''); delete from cs2.teams;--', 'is_captain', true, 'age13', true))));

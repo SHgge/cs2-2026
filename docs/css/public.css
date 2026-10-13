@@ -68,7 +68,7 @@ body.fullscreen.pub-idle, body.fullscreen.pub-idle * { cursor: none !important; 
 .sc-slot.is-now { background: #FEF2F2; box-shadow: inset 0 0 0 2px var(--err); }
 .sc-time { display: flex; align-items: baseline; gap: 8px; }
 .sc-time b { font-size: 1.3rem; font-variant-numeric: tabular-nums; }
-.sc-time span { color: var(--muted); font-variant-numeric: tabular-nums; }
+.sc-time span { color: #4B5563; font-variant-numeric: tabular-nums; }
 .sc-time .chip { align-self: center; }
 .sc-ms { display: grid; gap: 8px; }
 .sc-nowbox {
@@ -96,7 +96,7 @@ body.fullscreen.pub-idle, body.fullscreen.pub-idle * { cursor: none !important; 
 .gp-tbl th:first-child, .gp-tbl td:first-child { padding-left: 2px; width: 1.6em; }
 .gp-tbl abbr { text-decoration: none; cursor: help; }
 .gp-team b { display: block; font-size: 1.02rem; }
-.gp-seat { display: block; font-size: .76rem; color: var(--muted); }
+.gp-seat { display: block; font-size: .76rem; color: #4B5563; }
 tr.gp-q td { background: var(--g-l); }
 .gp-pts b { font-size: 1.06rem; }
 .gp-note { margin: 8px 0 0; }
@@ -123,7 +123,7 @@ tr.gp-q td { background: var(--g-l); }
   display: flex; align-items: center; flex-wrap: wrap; gap: 4px 8px; padding: 6px 10px; border-radius: 11px 11px 0 0;
   background: var(--navy); color: #fff; font-size: .85rem;
 }
-.bk-when { color: #CBD5E1; }
+.bk-when { color: #fff; }
 .bk-bh .chip, .bk-prov { margin-left: auto; }
 .bk-prov { font-size: .72rem; background: var(--warn-l); color: #7C2D12; border-radius: 6px; padding: 0 6px; }
 .bk-box.bks-final .bk-bh { background: var(--gold-ink); }
@@ -378,7 +378,7 @@ body.fullscreen a { color: #93C5FD; }
 .dr-next { min-width: 9em; }
 .dr-prog { font-variant-numeric: tabular-nums; color: var(--dk-muted); min-width: 4em; text-align: center; }
 .dr-vbtn { background: var(--ok); border-color: var(--ok); }
-.dr-keys { text-align: center; color: #64748B; font-size: .8em; margin: 0; }
+.dr-keys { text-align: center; color: #94A3B8; font-size: .8em; margin: 0; }
 .dr-verify { background: var(--dk-panel); border: 1px solid var(--dk-line); border-radius: 16px; padding: 1em 1.2em; scroll-margin-top: 16px; }
 .dr-verify h2 { margin-top: 0; font-size: 1.5em; }
 .dr .small { font-size: .85em; }

@@ -24,6 +24,8 @@ const POLL_MS = 30000;
 const tabUi = {}; // хэсэг бүрийн UI төлөв (сонгосон баг, шүүлтүүр) — хуудас солигдоход хадгалагдана
 
 const isReal = (t) => !t.is_hidden && t.code !== 'test';
+/** fetch failed → 'network'; HTTP error (e.g. API not deployed yet) → 'server' (generic message). */
+const transportError = (e) => ({ ok: false, error: e && e.message === 'network' ? 'network' : 'server', detail: e && e.message });
 
 function normalize(r) {
   const teams = (r.teams || []).slice().sort((a, b) => a.id - b.id)
@@ -68,9 +70,9 @@ export default async function render(root, params) {
   /* ---------------- login & one-time setup ---------------- */
   async function doLogin(label, secret, errEl) {
     let r;
-    try { r = await api.adminLogin(label, secret); } catch { r = { ok: false, error: 'network' }; }
+    try { r = await api.adminLogin(label, secret); } catch (e) { r = transportError(e); }
     if (!r || !r.ok || !r.session) { errEl.textContent = errMsg(r); return false; }
-    saveSession({ session: r.session, expires_at: r.expires_at || null, label });
+    saveSession({ session: r.session, expires_at: r.expires_at || null, label: r.label || label });
     return true;
   }
 
@@ -121,7 +123,7 @@ export default async function render(root, params) {
       if (s1.value !== s2.value) { errS.textContent = 'Нууц үг таарахгүй байна.'; s2.focus(); return; }
       busy(setupBtn, async () => {
         let r;
-        try { r = await api.adminSetup(c, l, s1.value); } catch { r = { ok: false, error: 'network' }; }
+        try { r = await api.adminSetup(c, l, s1.value); } catch (e) { r = transportError(e); }
         if (!r || !r.ok) { errS.textContent = errMsg(r); return; }
         toast('Админ үүслээ.', 'ok');
         if (await doLogin(l, s1.value, errS)) { s1.value = ''; s2.value = ''; code.value = ''; await showConsole(); }
@@ -154,7 +156,7 @@ export default async function render(root, params) {
       /** RPC cs2_admin(session, action, args). Never throws; shows a toast on error unless quiet. */
       async call(action, args = {}, { quiet = false } = {}) {
         let r;
-        try { r = await api.admin(c.session, action, args); } catch { r = { ok: false, error: 'network' }; }
+        try { r = await api.admin(c.session, action, args); } catch (e) { r = transportError(e); }
         if (!r || typeof r !== 'object') r = { ok: false, error: 'unknown' };
         if (!r.ok && r.error === 'bad_session') { if (alive) sessionExpired(); return r; }
         if (!r.ok && !quiet && alive) toast(errMsg(r), 'err', 6000);
@@ -248,12 +250,17 @@ export default async function render(root, params) {
 
   function updateVaultBar() {
     if (!vaultBar) return;
-    const n = vault.count();
-    vaultBar.hidden = n === 0;
+    const c = vault.counts();
+    const codes = c.class + c.referee;
+    vaultBar.hidden = codes === 0 && c.drawUnsaved === 0;
     clear(vaultBar);
-    if (n) {
-      vaultBar.appendChild(h('span', {}, `Санах ойд ${n} нууц код байна (QR, PIN). Хуудсыг шинэчилбэл устна — эхлээд хэвлэнэ үү.`));
+    if (codes) {
+      vaultBar.appendChild(h('span', {}, `Санах ойд ${codes} нууц код байна (QR, PIN). Хуудсыг шинэчилбэл устна — эхлээд хэвлэнэ үү.`));
       if (currentTab !== 'access') vaultBar.appendChild(btn('Эрх, хэвлэх', () => trySelect('access'), 'secondary'));
+    }
+    if (c.drawUnsaved) {
+      vaultBar.appendChild(h('span', {}, 'Сугалааны нууц тоог хадгалаагүй байна — татах эсвэл хэвлэнэ үү.'));
+      if (currentTab !== 'draw') vaultBar.appendChild(btn('Сугалаа', () => trySelect('draw'), 'secondary'));
     }
   }
 
@@ -322,7 +329,7 @@ export default async function render(root, params) {
   }
 
   async function logout() {
-    if (!vault.isEmpty()) {
+    if (vault.unsaved() > 0) {
       const ok = await confirmDialog({ title: 'Гарах уу?', text: 'Санах ойд хэвлээгүй код байж магадгүй. Гарвал тэдгээр устна.', ok: 'Гарах', danger: true });
       if (!ok) return;
     }

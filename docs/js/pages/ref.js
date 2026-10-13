@@ -449,6 +449,7 @@ function createRefPage(root, params) {
       return 'Энэ тоглолтыг өөрчлөх эрхгүй.';
     }
     if (code === 'validation') return 'Мэдээлэл буруу байна. Ерөнхий шүүгчид хэлнэ үү.';
+    if (code === 'draw_state') return 'Сугалаа нийтлэгдээгүй тул оноо оруулах боломжгүй.';
     if (code === 'not_found') return 'Тоглолт олдсонгүй.';
     return errorText(r);
   }

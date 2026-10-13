@@ -68,7 +68,7 @@ function keyDates(s, now) {
   const items = [
     { end: s.reg, when: dt(s.reg), text: 'Бүртгэл хаагдана (ангийн QR)' },
     { end: DEF.drill, when: '10.19–21', text: 'Steam-ээр QR нэвтрэх дадлага' },
-    { end: s.consent, when: dt(s.consent), text: 'Эцэг эхийн зөвшөөрөл (маягт 05) өгөх эцсийн хугацаа' },
+    { end: s.consent, when: dt(s.consent), text: 'Эцэг эхийн зөвшөөрөл (маягт 05, 05б) өгөх эцсийн хугацаа' },
     { end: s.draw, when: dt(s.draw), text: 'Техникийн зөвлөгөөн, хэсгийн сугалаа' },
     { end: DEF.day1End, when: '10.24 (Бя) 09:45–16:45', text: '1-р өдөр: хэсгийн шат. Бүртгэл 08:30, нээлт 09:00' },
     { end: DEF.day2End, when: '10.25 (Ня) 09:30', text: '2-р өдөр: шөвгийн 8 · 13:00 шөвгийн 4 · 14:45 финал, 3-р байр · 16:15 шагнал' },

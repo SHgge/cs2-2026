@@ -34,7 +34,7 @@ export function render(panel, ctx) {
     const r = await ctx.call('tokens_issue', { kind: 'class_all' });
     if (!r.ok) return;
     const items = Array.isArray(r.items) ? r.items : [];
-    for (const it of items) vault.putClass(withHidden(teamRef(ctx, it)), { token: it.token || null, pin: it.pin || null });
+    vault.putClasses(items.map((it) => [withHidden(teamRef(ctx, it)), { token: it.token || null, pin: it.pin || null }]));
     toast(`${items.length} багт эрх олголоо. Одоо хэвлэнэ үү.`, 'ok', 5000);
     await ctx.reload();
   }, 'gold');
@@ -75,18 +75,19 @@ export function render(panel, ctx) {
         mem && mem.pin ? btn('PIN хуулах', () => copyText(pinMessage(mem)), 'secondary small-btn') : null)));
   });
 
-  const items = vault.classes().filter((i) => !i.hidden);
-  const withToken = items.filter((i) => i.token).length;
-  const withPin = items.filter((i) => i.pin).length;
-  const printBox = items.length
+  const tokItems = vault.printable('token'); // the hidden test team only when no real class is held (test runs)
+  const pinItems = vault.printable('pin');
+  const withToken = tokItems.length;
+  const withPin = pinItems.length;
+  const printBox = withToken || withPin
     ? h('div', { class: 'card ok adm-print' },
       h('h3', {}, 'Хэвлэх, хуулах'),
       h('p', { class: 'small' }, `Санах ойд: QR ${withToken}, PIN ${withPin}. Хуудсыг шинэчилбэл (F5) устна.`),
       h('div', { class: 'row' },
         btn('Ангийн карт хэвлэх', () => goPrint('cards'), '', { disabled: !withToken }),
         btn('Багшийн PIN хэвлэх', () => goPrint('pins'), '', { disabled: !withPin }),
-        btn('Бүх холбоос хуулах', () => copyText(linksList(items, deadline)), 'secondary', { disabled: !withToken }),
-        btn('Бүх PIN хуулах', () => copyText(pinsList(items)), 'secondary', { disabled: !withPin }),
+        btn('Бүх холбоос хуулах', () => copyText(linksList(tokItems, deadline)), 'secondary', { disabled: !withToken }),
+        btn('Бүх PIN хуулах', () => copyText(pinsList(pinItems)), 'secondary', { disabled: !withPin }),
         btn('Санах ойг цэвэрлэх', async () => {
           const ok = await confirmDialog({ title: 'Санах ойг цэвэрлэх үү?', text: 'Хэвлэж, хуулж дууссан бол цэвэрлэнэ үү. Дахин харах боломжгүй.', ok: 'Цэвэрлэх', danger: true });
           if (ok) { vault.clearClasses(); toast('Цэвэрлэлээ', 'ok'); }
@@ -116,7 +117,7 @@ export function render(panel, ctx) {
     if (!name) return;
     const r = await ctx.call('tokens_issue', { kind: 'referee', station, label: name });
     if (!r.ok || !r.token) return;
-    vault.addReferee({ label: name, station, token: r.token });
+    vault.addReferee({ label: r.label || name, station, token: r.token });
     toast(`${name}: QR бэлэн. Хэвлэнэ үү.`, 'ok');
     await ctx.reload();
   }, 'secondary');
@@ -137,11 +138,15 @@ export function render(panel, ctx) {
       : null,
     refs.length
       ? h('div', { class: 'table-scroll adm-mt' }, h('table', { class: 'tbl' },
-        h('thead', {}, h('tr', {}, h('th', { scope: 'col' }, 'Шүүгч'), h('th', { scope: 'col' }, 'Станц'), h('th', { scope: 'col' }, 'Төлөв'))),
+        h('thead', {}, h('tr', {}, h('th', { scope: 'col' }, 'Шүүгч'), h('th', { scope: 'col' }, 'Станц'), h('th', { scope: 'col' }, 'Төлөв'), h('th', { scope: 'col' }, 'Үйлдэл'))),
         h('tbody', {}, refs.map((r) => h('tr', {},
           h('td', {}, r.label || '—'),
           h('td', {}, r.station === 'A' ? 'А станц' : r.station === 'B' ? 'Б станц' : 'Бүх тоглолт'),
-          h('td', {}, r.active === false ? chip('Идэвхгүй') : chip('Идэвхтэй', 'ok'), r.created_at ? h('span', { class: 'muted small' }, ` ${fmtDateTime(r.created_at)}`) : null))))))
+          h('td', {}, r.active === false ? chip('Идэвхгүй') : chip('Идэвхтэй', 'ok'), r.created_at ? h('span', { class: 'muted small' }, ` ${fmtDateTime(r.created_at)}`) : null),
+          h('td', {}, r.active === false || r.id == null ? null : btn('Хүчингүй болгох', async () => {
+            const ok = await confirmDialog({ title: `${r.label || 'Шүүгч'} — холбоосыг хүчингүй болгох уу?`, text: 'Энэ QR-ээр дахин нэвтрэх боломжгүй болно.', ok: 'Хүчингүй болгох', danger: true });
+            if (ok) await ctx.act('referee_revoke', { id: r.id }, 'Хүчингүй болголоо');
+          }, 'secondary small-btn')))))))
       : h('p', { class: 'muted small' }, 'Шүүгчид эрх олгоогүй байна.')));
 
   /* ---- site poster ---- */

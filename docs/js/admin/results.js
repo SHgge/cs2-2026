@@ -1,5 +1,5 @@
 // 6. Үр дүн — 20 тоглолтын оноо (урьдчилсан/баталгаажсан), техникийн ялагдал, OT, хуваарь өөрчлөх,
-// хэсгийн байр (урьдчилсан), шодоо (lot), хэсгийн дүн батлах, эцсийн байр.
+// хэсгийн байр (урьдчилсан), сугалаа (lot), хэсгийн дүн батлах, эцсийн байр.
 import { h, toast, fmtTime, fmtDate, fmtDateTime, teamName } from '../ui.js';
 import { btn, section, chip, confirmDialog, matchStatusChip, MATCH_STATUS } from './core.js';
 import {
@@ -9,7 +9,7 @@ import { resolveMatches, groupStandings, validScore, finalRanking, srcLabel } fr
 import { MATCHES } from '../event.js';
 
 const GROUP_STATUS = {
-  pending: ['Эхлээгүй', ''], provisional: ['Урьдчилсан', 'gold'], needs_lot: ['Шодоо хэрэгтэй', 'err'], complete: ['Дууссан', 'ok'],
+  pending: ['Эхлээгүй', ''], provisional: ['Урьдчилсан', 'gold'], needs_lot: ['Сугалаа хэрэгтэй', 'err'], complete: ['Дууссан', 'ok'],
 };
 const STAGE_LABEL = { qf: 'Шөвгийн 8', sf: 'Шөвгийн 4', final: 'Финал', third: '3-р байр' };
 
@@ -59,7 +59,7 @@ function matchCard(ctx, m, mo, mp) {
     const { a, b, f } = current();
     if (a == null || b == null) return 'Хоёр багийн оноог оруулна уу.';
     if (!isValid(m.stage, a, b, f)) {
-      return ko ? 'Шигшээ: 13:0–11, эсвэл нэмэлт цагтай (16:14, 19:15 …).' : 'Хэсгийн шат: 13:0–11 эсвэл 12:12 (тэнцээ).';
+      return ko ? 'Хасагдах шат: 13:0–11, эсвэл нэмэлт цагтай (16:14, 19:15 …).' : 'Хэсгийн шат: 13:0–11 эсвэл 12:12 (тэнцээ).';
     }
     return null;
   };
@@ -182,9 +182,14 @@ function lotBox(ctx, g, off, dec) {
   const st = ctx.state;
   const blocks = Array.isArray(off.tied) ? off.tied.filter((b) => Array.isArray(b) && b.length > 1) : [];
   const box = h('div', { class: 'adm-lot' },
-    h('h4', {}, 'Шодоо (ерөнхий шүүгч ахлагч нарын өмнө)'),
+    h('h4', {}, 'Ерөнхий шүүгчийн сугалаа (ахлагч нарын өмнө)'),
     Array.isArray(dec.lot) && dec.lot.length
-      ? h('p', { class: 'small' }, `Хадгалсан дараалал: ${dec.lot.map((id) => teamName(st, Number(id))).join(' → ')}${dec.lot_reason ? ` (${dec.lot_reason})` : ''}`)
+      ? h('div', { class: 'row' },
+        h('p', { class: 'small' }, `Хадгалсан дараалал: ${dec.lot.map((id) => teamName(st, Number(id))).join(' → ')}${dec.lot_reason ? ` (${dec.lot_reason})` : ''}`),
+        btn('Сугалааг арилгах', async () => {
+          const ok = await confirmDialog({ title: `${SEAT_CYR[g]} хэсгийн сугалааг арилгах уу?`, ok: 'Арилгах', danger: true });
+          if (ok) await ctx.act('group_lot', { grp: g, order: null }, 'Сугалааг арилгалаа');
+        }, 'secondary small-btn'))
       : null);
   if (!blocks.length) return box;
   const pickers = blocks.map((block) => {
@@ -197,9 +202,9 @@ function lotBox(ctx, g, off, dec) {
       sels.map((s, i) => h('label', { class: 'adm-seat' }, h('b', {}, `${i + 1}.`), s))));
     return { block, sels };
   });
-  const reason = h('input', { type: 'text', maxlength: 200, placeholder: 'Жишээ: 16:50-д ахлагч нарын өмнө шодоо хаясан' });
+  const reason = h('input', { type: 'text', maxlength: 200, placeholder: 'Жишээ: 16:50-д ахлагч нарын өмнө сугалаа татсан' });
   box.append(h('label', {}, 'Тэмдэглэл', reason),
-    btn('Шодооны дарааллыг хадгалах', async () => {
+    btn('Сугалааны дарааллыг хадгалах', async () => {
       const chosen = new Map();
       for (const p of pickers) {
         const ids = p.sels.map((s) => Number(s.value));
@@ -214,8 +219,8 @@ function lotBox(ctx, g, off, dec) {
         const p = pickers.find((x) => x.block.includes(r.teamId));
         if (p) { if (!emitted.has(p)) { order.push(...chosen.get(p.block)); emitted.add(p); } } else order.push(r.teamId);
       }
-      const ok = await confirmDialog({ title: `${SEAT_CYR[g]} хэсгийн шодоо хадгалах уу?`, text: order.map((id, i) => `${i + 1}. ${teamName(st, id)}`), ok: 'Хадгалах' });
-      if (ok) await ctx.act('group_lot', { grp: g, order, reason: reason.value.trim() }, 'Шодоо хадгаллаа');
+      const ok = await confirmDialog({ title: `${SEAT_CYR[g]} хэсгийн сугалааг хадгалах уу?`, text: order.map((id, i) => `${i + 1}. ${teamName(st, id)}`), ok: 'Хадгалах' });
+      if (ok) await ctx.act('group_lot', { grp: g, order, reason: reason.value.trim() }, 'Сугалаа хадгаллаа');
     }, 'small-btn'));
   return box;
 }

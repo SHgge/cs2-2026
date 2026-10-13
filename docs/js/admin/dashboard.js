@@ -1,7 +1,7 @@
 // 1. Самбар — 12 багийн төлөв, хугацаа, шүүлтүүр, CSV/JSON татах.
 import { h, toast, fmtDateTime, fmtCountdown } from '../ui.js';
 import { btn, section, chip, download } from './core.js';
-import { toCsv, fileStamp, isFuture } from './util.js';
+import { toCsv, fileStamp, isFuture, matchzyWithAliases, consentRowsWithAliases } from './util.js';
 
 const nPlayers = (t) => (Array.isArray(t.players) ? t.players.length : Number((t.reg && t.reg.players) || 0));
 const nConsents = (t) => (Array.isArray(t.players) ? t.players.filter((p) => p.consent_paper === true).length : Number((t.reg && t.reg.consents) || 0));
@@ -62,11 +62,20 @@ function teamCard(ctx, t) {
 async function doExport(ctx, kind) {
   const r = await ctx.call('export', { kind });
   if (!r.ok) return;
+  // Game feed names: the server export uses row 3б only; the hall projector (3а) shows the same feed,
+  // so streamName() needs BOTH 3а and 3б «Тийм» (fresh ticks/aliases from the overview).
+  let teams = ctx.state.teams;
+  if (kind === 'matchzy' || kind === 'consent') {
+    const ov = await ctx.call('overview', {}, { quiet: true });
+    if (ov.ok && Array.isArray(ov.teams)) teams = ov.teams;
+  }
   if (kind === 'matchzy') {
-    const { ok, ...rest } = r;
-    download(`cs2_matchzy_${fileStamp()}.json`, `${JSON.stringify(rest.teams ? { teams: rest.teams } : rest, null, 2)}\n`, 'application/json;charset=utf-8');
+    download(`cs2_matchzy_${fileStamp()}.json`, `${JSON.stringify({ teams: matchzyWithAliases(r.teams || {}, teams) }, null, 2)}\n`, 'application/json;charset=utf-8');
+    const miss = Array.isArray(r.missing) ? r.missing.length : 0;
+    if (miss) toast(`${miss} тоглогчийн SteamID64 дутуу — файлд ороогүй.`, 'warn', 6000);
   } else {
-    download(`cs2_${kind}_${fileStamp()}.csv`, toCsv(r.columns, r.rows), 'text/csv;charset=utf-8');
+    const rows = kind === 'consent' ? consentRowsWithAliases(r.columns, r.rows, teams) : r.rows;
+    download(`cs2_${kind}_${fileStamp()}.csv`, toCsv(r.columns, rows), 'text/csv;charset=utf-8');
   }
   toast('Файл татлаа', 'ok');
 }

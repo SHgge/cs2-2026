@@ -2,7 +2,7 @@
 import { SITE_URL, TZ } from '../config.js';
 
 /* ---------- CSV (UTF-8 BOM, formula-injection safe) ---------- */
-export const CSV_BOM = '﻿';
+export const CSV_BOM = '\uFEFF';
 const FORMULA_START = /^[=+\-@\t\r]/;
 
 /** One CSV cell. Text starting with = + - @ (or tab/CR) gets a leading apostrophe; RFC 4180 quoting. */
@@ -75,18 +75,26 @@ export const siteLabel = () => SITE_URL.replace(/^https?:\/\//, '').replace(/\/$
 
 /** Message the organiser forwards to a homeroom teacher → class chat (link only, no PIN). */
 export function classLinkMessage(item, deadline) {
+  if (item.is_teachers) {
+    return `«Ангийн аварга – CS2 2026» — Багш нарын багийн бүртгэл: ${classLink(item.token)}\n`
+      + `Хугацаа: ${deadline}. Холбоосыг зөвхөн багийн гишүүдэд хуваалцана уу.`;
+  }
   return `«Ангийн аварга – CS2 2026» — ${item.name} багийн бүртгэл: ${classLink(item.token)}\n`
     + `Хугацаа: ${deadline}. Холбоосыг зөвхөн ангийн чатад хуваалцаарай.`;
 }
-/** Teacher-only PIN line (sent separately from the link). */
-export function pinMessage(item) { return `${item.name} · Багшийн PIN: ${item.pin} · Сурагчдад бүү өгнө үү.`; }
+/** Teacher-only PIN line (sent separately from the link). The teachers' team PIN goes to its captain. */
+export function pinMessage(item) {
+  return item.is_teachers
+    ? `${item.name} · Ахлагчийн PIN: ${item.pin} · Бусдад бүү өгнө үү.`
+    : `${item.name} · Багшийн PIN: ${item.pin} · Сурагчдад бүү өгнө үү.`;
+}
 
 export function linksList(items, deadline) {
   const rows = items.filter((i) => i.token).map((i) => `${i.name}: ${classLink(i.token)}`);
   return `«Ангийн аварга – CS2 2026» — бүртгэлийн холбоосууд (хугацаа ${deadline})\n${rows.join('\n')}\n`;
 }
 export function pinsList(items) {
-  const rows = items.filter((i) => i.pin).map((i) => `${i.name}: ${i.pin}`);
+  const rows = items.filter((i) => i.pin).map((i) => `${i.name}${i.is_teachers ? ' (ахлагч)' : ''}: ${i.pin}`);
   return `Багшийн PIN (сурагчдад бүү өгнө үү)\n${rows.join('\n')}\n`;
 }
 
@@ -160,6 +168,46 @@ export function aliasFor(team, slot) { return `${team.is_teachers ? 'Багш' :
 /** Row 3а (projector) or 3б (online) not «Тийм» (false or not marked) → needs an alias. */
 export const needsAlias = (p) => p.consent_3a !== true || p.consent_3b !== true;
 export const playerId = (p) => (p.id != null ? p.id : p.player_id);
+/**
+ * Name shown in the game feed (MatchZy → hall projector AND stream): the Steam name only when BOTH rows 3а and 3б
+ * are «Тийм»; otherwise the alias (or the automatic «8а-Тоглогч3»). Stricter than the SQL export (3б only).
+ */
+export function streamName(p, team) {
+  if (!needsAlias(p)) return String(p.steam_nickname || '');
+  return String(p.alias || '').trim() || aliasFor(team || { name: '' }, p.slot);
+}
+/** MatchZy export {code:{name, players:{steam_id64: display}}} with streamName() applied (teams = overview teams). */
+export function matchzyWithAliases(mz, teams) {
+  const byCode = new Map((teams || []).map((t) => [t.code, t]));
+  const out = {};
+  for (const [code, entry] of Object.entries(mz || {})) {
+    const t = byCode.get(code);
+    const players = {};
+    for (const [sid, display] of Object.entries((entry && entry.players) || {})) {
+      const p = t && (t.players || []).find((x) => String(x.steam_id64 || '') === sid);
+      players[sid] = p ? streamName(p, t) : display;
+    }
+    out[code] = { ...entry, players };
+  }
+  return out;
+}
+/** Consent CSV (export kind 'consent'): recompute «Дамжуулалтад харагдах нэр» with streamName(). */
+export function consentRowsWithAliases(columns, rows, teams) {
+  const ix = (label) => (columns || []).indexOf(label);
+  const [iTeam, iSlot, iSteam, i3a, i3b, iAlias, iShow] = ['Баг', '№', 'Steam нэр', '3а', '3б', 'Хоч нэр', 'Дамжуулалтад харагдах нэр'].map(ix);
+  if (!Array.isArray(rows) || [iTeam, iSlot, iSteam, i3a, i3b, iAlias, iShow].some((i) => i < 0)) return rows;
+  const byName = new Map((teams || []).map((t) => [t.name, t]));
+  return rows.map((r) => {
+    if (!Array.isArray(r)) return r;
+    const p = {
+      slot: Number(r[iSlot]), steam_nickname: r[iSteam], alias: r[iAlias],
+      consent_3a: r[i3a] === 'Тийм', consent_3b: r[i3b] === 'Тийм',
+    };
+    const out = r.slice();
+    out[iShow] = streamName(p, byName.get(r[iTeam]) || { name: String(r[iTeam] || '') });
+    return out;
+  });
+}
 /** Players that need an alias and have none → [{player_id, team_id, slot, alias}]. */
 export function autoAliasPlan(teams) {
   const plan = [];
@@ -174,7 +222,7 @@ export function autoAliasPlan(teams) {
 }
 
 /* ---------- roster validation (mirrors the server rules, advisory only) ---------- */
-const NAME_RE = /^[\p{Script=Cyrillic}\p{Script=Latin} -]{1,30}$/u;
+const NAME_RE = /^[\p{Script=Cyrillic}\p{Script=Latin}][\p{Script=Cyrillic}\p{Script=Latin} -]{0,29}$/u; // starts with a letter (server rule)
 const INITIAL_RE = /^[\p{Script=Cyrillic}\p{Script=Latin}]$/u;
 export const STEAM_ID_RE = /^7656119\d{10}$/;
 
@@ -186,7 +234,7 @@ export function isBlankPlayer(p) {
 export function playerErrors(p) {
   const e = [];
   const fn = String(p.first_name || '').trim();
-  const si = String(p.surname_initial || '').trim();
+  const si = String(p.surname_initial || '').trim().replace(/\.+$/, ''); // «Б.» = «Б» (server strips the dot)
   const nick = String(p.steam_nickname || '').trim();
   const sid = String(p.steam_id64 || '').trim();
   if (!fn) e.push({ field: 'first_name', code: 'required' });
@@ -232,16 +280,45 @@ export const FIELD_ERROR_TEXT = {
   multiple: 'Ахлагч нэг л байна',
   missing: 'Дутуу',
 };
+const MAX_LEN = { first_name: 30, steam_nickname: 32, alias: 32, label: 60, secret: 200, text: 500, reason: 300 };
+const FIELD_LABEL = {
+  first_name: 'Нэр', surname_initial: 'Овгийн үсэг', steam_nickname: 'Steam нэр', steam_id64: 'SteamID64', is_captain: 'Ахлагч',
+  age13: '13+ нас', slot: 'Тоглогч', players: 'Тоглогчид', reason: 'Шалтгаан', label: 'Нэр', secret: 'Нууц үг', text: 'Текст',
+  stream_url: 'Холбоос', order: 'Дараалал', alias: 'Хоч нэр', until: 'Хугацаа', station: 'Станц', start: 'Цаг', status: 'Төлөв',
+  commit: 'Commit', team: 'Баг', forfeit: 'Техникийн ялагдал', action: 'Үйлдэл', grp: 'Хэсэг', approved: 'Батламж',
+  locked: 'Түгжээ', level: 'Төрөл', kind: 'Төрөл', phase: 'Үе шат', confirm: '«УСТГАХ»', inputs: 'Тоонууд', groups: 'Хэсгүүд',
+  consent_paper: '05', consent_3a: '3а', consent_3b: '3б', consent_3v: '3в', registration_open: 'Бүртгэл',
+  reg_closes_at: 'Бүртгэл хаагдах', consent_deadline_at: 'Зөвшөөрлийн хугацаа', roster_freeze_at: 'Царцах хугацаа',
+  tokens_valid_until: 'Холбоосын хугацаа',
+};
+/** Short Mongolian summary of server validation errors (first 3). */
+export function validationText(errors) {
+  const list = Array.isArray(errors) ? errors : [];
+  const one = (e) => {
+    const f = String(e.field || '');
+    if (f === 'players' && e.code === 'count') return '5–6 тоглогч хэрэгтэй';
+    if (f === 'slot' && e.code === 'missing') return `${e.slot}-р тоглогч дутуу`;
+    if (f.startsWith('inputs.')) return `${f.slice(7)}: тоо буруу`;
+    if (f.startsWith('groups.')) return 'Хэсгийн суудал буруу';
+    if (f.startsWith('attest.')) return 'Баталгааны 4 зүйл дутуу';
+    const who = e.slot ? `${e.slot}-р тоглогч — ` : '';
+    return `${who}${FIELD_LABEL[f] || f}: ${fieldErrorText(f, e.code)}`;
+  };
+  const out = [...new Set(list.map(one))];
+  return out.slice(0, 3).join('; ') + (out.length > 3 ? ' …' : '');
+}
+
 export function fieldErrorText(field, code) {
   if (code === 'invalid') {
     if (field === 'first_name') return 'Зөвхөн үсэг, зай, зураас';
     if (field === 'surname_initial') return 'Нэг үсэг';
     if (field === 'steam_id64') return '7656119-ээр эхэлсэн 17 оронтой тоо';
   }
-  if (code === 'too_long') return field === 'first_name' ? '30 хүртэл тэмдэгт' : '32 хүртэл тэмдэгт';
-  if (code === 'too_short') return '2-оос доошгүй тэмдэгт';
+  if (code === 'too_long') return `${MAX_LEN[field] || 32} хүртэл тэмдэгт`;
+  if (code === 'too_short') return field === 'secret' ? '10-аас доошгүй тэмдэгт' : '2-оос доошгүй тэмдэгт';
   if (field === 'age13' && code === 'required') return '13 нас хүрсэн байх ёстой';
   if (field === 'is_captain' && code === 'missing') return 'Ахлагч сонгоно уу';
+  if (field === 'label' && code === 'taken') return 'Ийм нэр бүртгэлтэй';
   return FIELD_ERROR_TEXT[code] || 'Шалгана уу';
 }
 

@@ -2,11 +2,36 @@
 // үйлдлийн бүртгэл, бүх сесс хаах, мэдээлэл устгах («УСТГАХ»).
 import { h, toast, fmtDateTime, teamName } from '../ui.js';
 import { btn, section, chip, confirmDialog } from './core.js';
+import { isoToLocalInput, localInputToIso } from './util.js';
 
 const PURGE = [
   ['stream', 'Дамжуулалтын мэдээлэл устгах', 'Шууд дамжуулалтад зориулсан мэдээллийг устгана. Facebook-ээс бичлэгийг устгасны дараа (11.01) хийнэ үү.'],
   ['personal', 'Хувийн мэдээллийг бүрэн устгах', 'Тоглогчдын нэр, Steam мэдээлэл, зөвшөөрлийн тэмдэглэгээг бүрмөсөн устгана. 12.31-ээс өмнө хийнэ үү.'],
 ];
+
+const ACTION_LABEL = {
+  login: 'Нэвтэрсэн', logout: 'Гарсан', admin_setup: 'Анхны тохиргоо', admin_setup_fail: 'Тохиргооны код буруу',
+  admin_login_fail: 'Нэвтрэх оролдлого буруу', team_save: 'Бүрэлдэхүүн зассан', team_unconfirm: 'Баталгаа цуцалсан',
+  confirm_on_behalf: 'Багшийн өмнөөс баталсан', consent_set: 'Зөвшөөрөл, хоч нэр', lock: 'Түгжээ',
+  unlock_until: 'Засвар түр нээсэн', settings_set: 'Тохиргоо', announce: 'Зарлал нийтэлсэн', announce_hide: 'Зарлал нуусан',
+  tokens_issue: 'Эрх олгосон', pin_reset: 'PIN шинэчилсэн', referee_revoke: 'Шүүгчийн эрх цуцалсан', export: 'Файл татсан',
+  draw_commit: 'Сугалаа: commit', draw_compute: 'Сугалаа: тооцоолсон', draw_publish: 'Сугалаа: нийтэлсэн',
+  draw_void: 'Сугалаа: хүчингүй', draw_manual: 'Гар сугалаа', draw_bad_commit: 'Сугалаа: нууц тоо таараагүй',
+  match_live: 'Тоглолт эхэлсэн', match_reported: 'Оноо (урьдчилсан)', match_final: 'Оноо (баталгаажсан)',
+  match_update: 'Хуваарь өөрчилсөн', group_lot: 'Хэсгийн сугалаа', group_approve: 'Хэсгийн дүн', purge: 'Мэдээлэл устгасан',
+  sessions_revoke: 'Сесс хаасан', class_save: 'Анги хадгалсан', class_confirm: 'Багш баталсан',
+};
+/** 'admin:Нэр' → 'Нэр', 'ref:Нэр' → 'Шүүгч: Нэр', 'class:8a' → 'Анги: 8a' */
+function actorText(a) {
+  const s = String(a || '');
+  if (!s || s === 'anon') return '—';
+  const [role, ...rest] = s.split(':');
+  const name = rest.join(':');
+  if (role === 'admin') return name || 'Админ';
+  if (role === 'ref') return name ? `Шүүгч: ${name}` : 'Шүүгч';
+  if (role === 'class') return name ? `Анги: ${name}` : 'Анги';
+  return s;
+}
 
 function detailText(v) {
   if (v == null) return '';
@@ -68,7 +93,43 @@ function settingsBox(ctx) {
         if (v && !/^https:\/\/\S+$/.test(v)) { toast('Холбоос https://-ээр эхэлнэ.', 'err'); url.focus(); return; }
         await ctx.act('settings_set', { stream_url: v || null }, v ? 'Холбоос хадгаллаа' : 'Холбоосыг арилгалаа');
       }, 'secondary')),
-    h('p', { class: 'muted small' }, 'Нүүр хуудас, ТВ дэлгэцэнд «Шууд үзэх» товч болж харагдана.'));
+    h('p', { class: 'muted small' }, 'Нүүр хуудас, ТВ дэлгэцэнд «Шууд үзэх» товч болж харагдана.'),
+    deadlinesBox(ctx, S));
+}
+
+const DEADLINES = [
+  ['reg_closes_at', 'Бүртгэл хаагдах'],
+  ['consent_deadline_at', 'Зөвшөөрлийн хугацаа'],
+  ['roster_freeze_at', 'Бүрэлдэхүүн царцах (сугалаа)'],
+];
+/** Rarely needed: move a deadline for everyone (one class → «Бүртгэл» → «хүртэл нээх»). */
+function deadlinesBox(ctx, S) {
+  const inputs = DEADLINES.map(([key, label]) => {
+    const inp = h('input', { type: 'datetime-local', step: 300, id: `adm-dl-${key}` });
+    inp.value = isoToLocalInput(S[key]);
+    inp.addEventListener('change', () => ctx.setDirty(true));
+    return { key, label, inp };
+  });
+  return h('details', { class: 'adm-mt' },
+    h('summary', {}, 'Хугацаа өөрчлөх (шийдвэр гарсан үед л)'),
+    h('p', { class: 'muted small' }, 'Бүх ангид үйлчилнэ. Нэг ангид бол «Бүртгэл» хэсгийн «хүртэл нээх»-ийг ашиглана уу.'),
+    h('div', { class: 'adm-dl-grid' }, inputs.map(({ key, label, inp }) => h('label', { for: `adm-dl-${key}` }, label, inp))),
+    h('div', { class: 'row adm-mt' }, btn('Хугацаа хадгалах', async () => {
+      const args = {};
+      for (const { key, inp } of inputs) {
+        const iso = localInputToIso(inp.value);
+        if (!iso) { toast('Огноо, цагаа бүрэн оруулна уу.', 'err'); inp.focus(); return; }
+        if (Date.parse(iso) !== Date.parse(S[key] || '')) args[key] = iso;
+      }
+      const keys = Object.keys(args);
+      if (!keys.length) { toast('Өөрчлөлт алга.', 'warn'); return; }
+      const ok = await confirmDialog({
+        title: 'Хугацааг өөрчлөх үү?',
+        text: keys.map((k) => `${DEADLINES.find((d) => d[0] === k)[1]}: ${fmtDateTime(args[k])}`),
+        ok: 'Хадгалах',
+      });
+      if (ok) await ctx.act('settings_set', args, 'Хугацаа шинэчиллээ');
+    }, 'secondary')));
 }
 
 function auditBox(ctx) {
@@ -80,8 +141,8 @@ function auditBox(ctx) {
         h('thead', {}, h('tr', {}, ['Хэзээ', 'Хэн', 'Үйлдэл', 'Дэлгэрэнгүй'].map((x) => h('th', { scope: 'col' }, x)))),
         h('tbody', {}, rows.map((a) => h('tr', {},
           h('td', { class: 'nowrap' }, fmtDateTime(a.at || a.created_at)),
-          h('td', {}, a.actor || a.actor_label || a.by || '—'),
-          h('td', {}, a.action || '—'),
+          h('td', {}, actorText(a.actor || a.actor_label || a.by)),
+          h('td', { title: a.action || '' }, ACTION_LABEL[a.action] || a.action || '—'),
           h('td', { class: 'small' }, [
             a.team_id != null ? `${teamName(ctx.state, Number(a.team_id))}. ` : '',
             a.match_no != null ? `№${a.match_no}. ` : '',
@@ -111,8 +172,13 @@ function securityBox(ctx) {
         if (typed.value.trim() !== 'УСТГАХ') { toast('Дээрх талбарт «УСТГАХ» гэж бичнэ үү.', 'err'); typed.focus(); return; }
         const ok = await confirmDialog({ title: `${label}?`, text: [desc, 'Энэ үйлдлийг буцаах боломжгүй.'], ok: 'Устгах', danger: true });
         if (!ok) return;
-        const r = await ctx.act('purge', { phase, confirm: 'УСТГАХ' }, 'Устгалаа');
-        if (r.ok) typed.value = '';
+        const r = await ctx.act('purge', { phase, confirm: 'УСТГАХ' }, null);
+        if (r.ok) {
+          typed.value = '';
+          toast(phase === 'personal'
+            ? `Устгалаа: ${r.players ?? 0} тоглогч, ${r.referees ?? 0} шүүгчийн холбоос, ${r.sessions ?? 0} сесс.`
+            : `Устгалаа: ${r.ticks ?? 0} тоглогчийн 3а–3в тэмдэглэгээ, хоч нэр.`, 'ok', 6000);
+        }
       }, 'danger'))));
 }
 

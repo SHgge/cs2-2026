@@ -109,7 +109,7 @@ export default async function render(root) {
     if (note) body.appendChild(note);
     body.appendChild(bracketTree(cur, { now, rows }));
     body.appendChild(h('p', { class: 'small muted bk-legend' },
-      'А№1 = А хэсгийн 1-р байр, Б№2 = Б хэсгийн 2-р байр. Нэг хэсгийн 2 баг зөвхөн финал эсвэл 3-р байрын тоглолтод таарч болно.'));
+      'А№1 = А хэсгийн 1-р байр, Б№2 = Б хэсгийн 2-р байр. Нэг хэсгийн 2 баг дахин таарвал зөвхөн финал эсвэл 3-р байрын тоглолтод таарна.'));
     body.appendChild(podium(cur));
   };
   const unbind = bindState(body, (s, i) => { cur = s; info = i; draw(); }, clock);

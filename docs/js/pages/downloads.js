@@ -3,13 +3,13 @@ import { h, clear } from '../ui.js';
 
 const FILES = [
   { no: '02', title: 'Тэмцээний удирдамж', note: 'Бүтэн дүрэм, систем, шагнал, хуваарь.', href: 'assets/docs/02_Udirdamj.docx', kind: 'DOCX' },
-  { no: '05', title: 'Эцэг эхийн зөвшөөрөл', note: 'Хэвлэж бөглөөд 10.21 (Лх) 17:00 хүртэл анги удирдсан багшид өгнө үү.', href: 'assets/docs/05_Zovshoorol.docx', kind: 'DOCX', key: true },
-  { no: '05б', title: 'Нэмэлт зөвшөөрөл (шууд дамжуулалт)', note: 'Маягт 05-ын өмнөх хувилбарыг өгсөн бол үүнийг бөглөнө үү.', href: 'assets/docs/05b_Nemelt_zovshoorol.docx', kind: 'DOCX' },
+  { no: '05', title: 'Эцэг эхийн зөвшөөрөл', note: '05б хамт (3-р хуудас). Хэвлэж бөглөөд 10.21 (Лх) 17:00 хүртэл анги удирдсан багшид өгнө үү.', href: 'assets/docs/05_Zovshoorol.docx', kind: 'DOCX', key: true },
+  { no: '05б', title: 'Нэмэлт зөвшөөрөл (цахим бүртгэл)', note: 'Бүх оролцогч бөглөнө. 05-ыг өмнө нь авсан бол зөвхөн үүнийг хэвлэнэ үү.', href: 'assets/docs/05b_Nemelt_zovshoorol.docx', kind: 'DOCX' },
   { no: '06', title: 'Тоглолтын дүрэм ба ёс зүй', note: 'Тоглогч, менежер бүр уншиж танилцана.', href: 'assets/docs/06_Durem.docx', kind: 'DOCX' },
   { no: '12', title: 'Хуваарийн схем, A3', note: 'Хоёр өдөр нэг дор. Самбарт хэвлэнэ.', href: 'assets/docs/12_Huvaari.pdf', kind: 'PDF', open: true },
   { no: '12', title: 'Хуваарийн схем (зураг)', note: 'Хоёр өдөр нэг дор.', href: 'assets/img/12_Huvaari.png', kind: 'PNG', open: true },
-  { no: '12а', title: '1-р өдрийн хуваарь', note: 'Утсаар харах, групп чатад тавих.', href: 'assets/img/12a_Huvaari_1r_odor.png', kind: 'PNG', open: true },
-  { no: '12б', title: '2-р өдрийн хуваарь', note: 'Утсаар харах, групп чатад тавих.', href: 'assets/img/12b_Huvaari_2r_odor.png', kind: 'PNG', open: true },
+  { no: '12а', title: '1-р өдрийн хуваарь', note: 'Утсаар харах, ангийн чатад тавих.', href: 'assets/img/12a_Huvaari_1r_odor.png', kind: 'PNG', open: true },
+  { no: '12б', title: '2-р өдрийн хуваарь', note: 'Утсаар харах, ангийн чатад тавих.', href: 'assets/img/12b_Huvaari_2r_odor.png', kind: 'PNG', open: true },
 ];
 
 export default async function render(root) {

@@ -89,6 +89,7 @@ function stepCommit(ctx) {
 /* ---- step 2: numbers + secret (status committed) ---- */
 function stepCompute(ctx, ui, d) {
   if (!ui.nums) ui.nums = {};
+  if (ui.commit !== d.commit) { ui.commit = d.commit; ui.secret = ''; ui.preview = null; } // a new commit → old secret/preview no longer apply
   if (!ui.secret) { const v = vault.draw(); if (v && v.commit === d.commit) ui.secret = v.secret; }
   const numInputs = {};
   const grid = h('div', { class: 'adm-nums' }, DRAW_ORDER.map((code) => {
@@ -226,20 +227,22 @@ function stepResult(ctx, ui, d) {
   return box;
 }
 
-function voidBox(ctx, d) {
-  const reported = (ctx.state.matches || []).some((m) => m.stage === 'group' && (m.status === 'reported' || m.status === 'final'));
+function voidBox(ctx, ui, d) {
+  const started = (ctx.state.matches || []).some((m) => m.stage === 'group' && m.status && m.status !== 'scheduled');
   return h('details', { class: 'adm-danger' },
     h('summary', {}, 'Сугалааг хүчингүй болгох'),
     h('p', { class: 'small' }, d.status === 'committed'
       ? 'Нууц тоо алдагдсан бол хүчингүй болгоод шинээр эхлүүлнэ үү.'
-      : 'Хэсгийн тоглолтын оноо оруулсан бол хүчингүй болгох боломжгүй.'),
+      : 'Хэсгийн тоглолт эхэлсэн бол хүчингүй болгох боломжгүй.'),
     btn('Хүчингүй болгох', async () => {
       const reason = await confirmDialog({
         title: 'Сугалааг хүчингүй болгох уу?', text: 'Шалтгаан нь түүхэнд хадгалагдаж, нийтэд харагдана.', ok: 'Хүчингүй болгох', danger: true,
         input: { label: 'Шалтгаан', required: true, min: 5 },
       });
-      if (reason) await ctx.act('draw_void', { reason }, 'Хүчингүй болголоо');
-    }, 'danger', { disabled: reported }));
+      if (!reason) return;
+      const r = await ctx.act('draw_void', { reason }, 'Хүчингүй болголоо', { reload: false });
+      if (r.ok) { vault.clearDraw(); ui.preview = null; ui.secret = ''; await ctx.reload(); } // a new draw starts with a new secret
+    }, 'danger', { disabled: started }));
 }
 
 function manualBox(ctx, ui) {
@@ -276,6 +279,8 @@ function manualBox(ctx, ui) {
 
 export function render(panel, ctx, ui) {
   const d = ctx.state.draw || { status: 'none' };
+  // After «computed» the secret is public (shown on #/draw for checking) — no need to keep it in memory.
+  if ((d.status === 'computed' || d.status === 'published') && vault.draw()) vault.clearDraw();
   const [stText, stKind] = DRAW_STATUS[d.status] || [d.status || '—', ''];
   panel.appendChild(h('div', { class: 'row adm-sec-plain' }, h('h2', {}, 'Сугалаа'), chip(stText, stKind)));
 
@@ -283,7 +288,7 @@ export function render(panel, ctx, ui) {
   else if (d.status === 'committed') panel.appendChild(stepCompute(ctx, ui, d));
   else panel.appendChild(stepResult(ctx, ui, d));
 
-  if (d.status && d.status !== 'none') panel.appendChild(voidBox(ctx, d));
+  if (d.status && d.status !== 'none') panel.appendChild(voidBox(ctx, ui, d));
   if (d.status !== 'published' && d.status !== 'computed') panel.appendChild(manualBox(ctx, ui));
 
   const hist = Array.isArray(d.history) ? d.history : [];

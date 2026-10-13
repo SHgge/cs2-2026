@@ -4,7 +4,7 @@ import { btn, section, chip, confirmDialog } from './core.js';
 import { needsAlias, autoAliasPlan, playerId } from './util.js';
 
 const COLS = [
-  ['consent_paper', '05', 'Эцэг эхийн зөвшөөрөл (маягт 05)'],
+  ['consent_paper', '05', 'Эцэг эхийн зөвшөөрөл (маягт 05, 05б)'],
   ['consent_3a', '3а', 'Танхимын проектор'],
   ['consent_3b', '3б', 'Онлайн шууд дамжуулалт'],
   ['consent_3v', '3в', 'Тайлбарлагчийн дуу'],
@@ -84,7 +84,7 @@ export function render(panel, ctx, ui) {
   }, 'gold');
 
   panel.appendChild(section('Зөвшөөрөл',
-    h('p', { class: 'muted small' }, 'Цаасан маягтыг шалгаад тэмдэглэнэ үү. 05 — эцэг эхийн зөвшөөрөл; 3а — танхимын проектор; 3б — онлайн дамжуулалт; 3в — тайлбарлагчийн дуу. Тэмдэглэх бүрт шууд хадгална.'),
+    h('p', { class: 'muted small' }, 'Цаасан маягтыг шалгаад тэмдэглэнэ үү. 05 — маягт 05, 05б ирсэн; 3а — танхимын проектор; 3б — онлайн дамжуулалт; 3в — тайлбарлагчийн дуу. Тэмдэглэх бүрт шууд хадгална.'),
     h('p', { class: 'muted small' }, '3а эсвэл 3б «Тийм» биш тоглогч дэлгэц, дамжуулалтад зөвхөн хоч нэрээр харагдана.'),
     counts,
     h('div', { class: 'row adm-mt' }, teamSel, showSel, h('span', { class: 'spacer' }), autoBtn, progress)));

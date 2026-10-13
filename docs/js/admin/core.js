@@ -1,6 +1,7 @@
 // Админы нийтлэг хэсэг: сесс, алдааны текст, баталгаажуулах цонх, татах, жижиг UI туслахууд.
 import { errorText } from '../api.js';
 import { h, fmtTime } from '../ui.js';
+import { validationText } from './util.js';
 
 /* ---------- session (sessionStorage — cleared when the tab closes) ---------- */
 const KEY = 'cs2_admin_session';
@@ -20,9 +21,13 @@ export function dropSession() { try { sessionStorage.removeItem(KEY); } catch { 
 export function errMsg(r) {
   if (!r) return 'Алдаа гарлаа. Дахин оролдоно уу.';
   if (r.error === 'network') return 'Сүлжээний алдаа. Интернэтээ шалгаад дахин оролдоно уу.';
+  if (r.error === 'server') return 'Серверийн алдаа гарлаа. Түр хүлээгээд дахин оролдоно уу.';
   let m = errorText(r);
   if ((r.error === 'throttled' || r.error === 'pin_locked') && r.until) m += ` ${fmtTime(r.until)} хүртэл хүлээнэ үү.`;
-  if (r.error === 'validation' && Array.isArray(r.errors) && r.errors.length) m += ` Алдаатай талбар: ${r.errors.length}.`;
+  if (r.error === 'validation' && Array.isArray(r.errors) && r.errors.length) m += ` ${validationText(r.errors)}.`;
+  if (r.error === 'draw_state' && r.reason === 'matches_started') m += ' Хэсгийн тоглолт эхэлсэн байна.';
+  if (r.error === 'draw_state' && r.reason === 'no_seats') m += ' Эхлээд сугалааг нийтэлнэ үү.';
+  if (r.error === 'pin_locked' && r.hard) m += ' PIN-ийг шинэчилнэ үү.';
   return m;
 }
 

@@ -322,7 +322,7 @@ body[data-page="ref"] { padding-bottom: env(safe-area-inset-bottom); }
 .r-hint { margin: 10px 0 0; padding: 10px 12px; border-radius: 10px; text-align: center; font-weight: 700; background: #F1F5F9; }
 .r-hint.ok { background: var(--ok-l); color: var(--ok); }
 .r-hint.err { background: var(--err-l); color: var(--err); }
-.r-hint.muted { color: var(--muted); font-weight: 600; }
+.r-hint.muted { color: #4B5563; font-weight: 600; }
 .r-actions { display: grid; gap: 10px; margin-top: 12px; }
 .r-send { font-size: 1.2rem; min-height: 60px; }
 .r-ff-btn { border-color: var(--err); color: var(--err); }

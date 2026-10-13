@@ -166,7 +166,8 @@ begin
                                                           'consent_3b', false, 'consent_3v', true, 'alias', '  12а-Тоглогч1 '));
   assert (r ->> 'ok')::boolean and r -> 'player' ->> 'alias' = '12а-Тоглогч1' and r -> 'player' ->> 'consent_3b' = 'false'
          and (r -> 'player' ->> 'consent_paper')::boolean, 'consent_set: ' || r::text;
-  r := cs2_api.admin(s, 'consent_set', jsonb_build_object('player_id', pid2, 'consent_paper', true, 'consent_3b', true));
+  r := cs2_api.admin(s, 'consent_set', jsonb_build_object('player_id', pid2, 'consent_paper', true, 'consent_3a', true,
+                                                          'consent_3b', true));
   assert (r ->> 'ok')::boolean, 'consent_set #2';
   assert cs2_api.admin(s, 'consent_set', jsonb_build_object('player_id', pid, 'consent_3a', 'maybe')) ->> 'error' = 'validation', 'bad tick';
   assert cs2_api.admin(s, 'consent_set', jsonb_build_object('player_id', pid, 'alias', repeat('x', 33))) ->> 'error' = 'validation',
@@ -204,7 +205,7 @@ begin
   assert jsonb_array_length(r -> 'rows') = 6 and jsonb_array_length(r -> 'columns') = 11, 'consent export';
   assert r -> 'rows' -> 0 = jsonb_build_array('12а', 1, 'Админбат', 'А', '12а | Adminbat', 'Тийм', 'Тийм', 'Үгүй', 'Тийм',
                                               '12а-Тоглогч1', '12а-Тоглогч1'), 'consent row 1 (3б no -> alias): ' || (r -> 'rows' -> 0)::text;
-  assert r -> 'rows' -> 1 ->> 10 = '12а | Bold' and r -> 'rows' -> 2 ->> 10 = '12а-Тоглогч3', 'stream names: consent / fallback';
+  assert r -> 'rows' -> 1 ->> 10 = '12а | Bold' and r -> 'rows' -> 2 ->> 10 = '12а-Тоглогч3', 'stream names: 3а+3б / fallback';
   r := cs2_api.admin(s, 'export', '{"kind":"results"}');
   assert jsonb_array_length(r -> 'rows') = 20 and jsonb_array_length(r -> 'columns') = 14 and r -> 'rows' -> 0 ->> 4 = '2026-10-24 09:45',
          'results export: ' || (r -> 'rows' -> 0)::text;
