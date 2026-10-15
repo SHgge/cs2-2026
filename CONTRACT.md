@@ -1,6 +1,8 @@
-# CONTRACT — «Ангийн аварга – CS2 2026» online portal (binding for every builder)
+# CONTRACT — «Сургуулийн аварга – CS2 2026» online portal (binding for every builder)
 
-Read this whole file first. Also read `C:\Users\wisez\Cs2event\_build\SPEC.md` (SPEC v4, tournament facts) — the portal must never contradict it.
+Read this whole file first. Also read `C:\Users\wisez\Cs2event\_build\SPEC.md` (SPEC v5 2026-10-15, tournament facts) — the portal must never contradict it.
+v5 (2026-10-15): event name «Сургуулийн аварга – CS2 2026»; team fee 120 000 ₮ per class team and prize fund
+1 200 000 ₮ + MVP; new deadlines (below); school Octolearn London School, organiser А.Мөнгөншагай; school logo in the header/favicon.
 Language of all user-facing text: Mongolian Cyrillic, short plain sentences (≤15 words), students addressed with «-аарай», adults «-на уу».
 
 ## 0. Decisions (fixed)
@@ -9,7 +11,10 @@ Language of all user-facing text: Mongolian Cyrillic, short plain sentences (≤
 - Browser → Supabase: plain `fetch` POST to `${SUPABASE_URL}/rest/v1/rpc/<fn>` with header `apikey: <publishable key>` and `Content-Type: application/json` (see `docs/js/api.js`). Publishable key: `sb_publishable_3qVbHvZtEnnXJ_INQTQKjw_MKir4rC8` (public by design). Fallback legacy anon JWT is in `config.js` (also public).
 - Access: class team page by secret token in the URL fragment `#/k/<token>`; homeroom teacher confirms with a 4-digit PIN; referees `#/ref/<token>`; organiser `#/admin` (own secret + DB session). Public pages show ONLY team (class) names, schedule, scores, groups, bracket, counts — **never player names, nicknames or SteamIDs**.
 - Parental consent stays on paper (form 05/05б); the system only records ticks.
-- Deadlines (Asia/Ulaanbaatar = UTC+8, no DST): registration closes **2026-10-16T17:00:00+08:00**; consents **2026-10-21T17:00:00+08:00**; roster freeze (draw) **2026-10-22T16:00:00+08:00**; tokens valid until **2026-10-25T18:00:00+08:00**.
+- Deadlines (Asia/Ulaanbaatar = UTC+8, no DST) — SPEC v5, set in `cs2.settings` by **migration 12** (`supabase/migrations/12_v5_name_deadlines.sql`):
+  online registration closes = roster freeze **2026-10-23T23:59:59+08:00** (`reg_closes_at` = `roster_freeze_at`); paper consent 05 + 05б, paper form 04 and the team fee **2026-10-23T17:00:00+08:00** (`consent_deadline_at`; the fee has no DB field);
+  group draw **2026-10-22T16:00:00+08:00** — a fixed constant (`DRAW_AT` in `event.js`), it does **not** freeze rosters; never derive the draw time from `roster_freeze_at`;
+  draw commit published 10.21; tokens valid until **2026-10-25T18:00:00+08:00**. Client-side defaults must equal these values (`event.js` `DATES`).
 - One-time admin setup code: SHA-256 hex of the code = `a4c11992d2e41a1ccbaf90b01a4cd0f018884afbe40b82bb9ef65796eca4f8ed` (plaintext is given to the user only; never write it anywhere).
 
 ## 1. File ownership (do not edit files you do not own; ask via your final report instead)
@@ -31,6 +36,14 @@ Public asset file names (produced by the Docs builder; pages must link exactly t
 ## 2. Event data (`docs/js/event.js` exports, also mirrored in SQL seed)
 Internal keys are Latin; display labels Cyrillic.
 ```js
+// v5 (2026-10-15)
+export const EVENT_NAME = 'Сургуулийн аварга – CS2 2026'; export const CUP_NAME = 'Сургуулийн аварга'; export const CHAMPION_TITLE = 'Сургуулийн аварга анги';
+export const DATES = { reg_closes_at:'2026-10-23T23:59:59+08:00', roster_freeze_at:'2026-10-23T23:59:59+08:00', consent_deadline_at:'2026-10-23T17:00:00+08:00',
+  fee_due_at:'2026-10-23T17:00:00+08:00', drill_from:'2026-10-19T00:00:00+08:00', drill_to:'2026-10-23T18:00:00+08:00',
+  draw_commit_on:'2026-10-21T00:00:00+08:00', draw_at:'2026-10-22T16:00:00+08:00', links_expire_at:'2026-10-25T18:00:00+08:00' };
+export const DRAW_AT = DATES.draw_at;
+export const FEE = { team:120000, per_player:20000, teams:11, total:1320000 };          // teachers' team pays no fee
+export const PRIZES = { fund:1200000, place:[600000,360000,240000], per_player:[100000,60000,40000], mvp_cash:100000, mvp_cup:20000 };
 export const GROUPS = ['A','B','V','G'];                       // display: GROUP_LABEL
 export const GROUP_LABEL = {A:'А', B:'Б', V:'В', G:'Г'};
 export const GROUP_COLOR = {A:'#2563EB', B:'#16A34A', V:'#EA580C', G:'#9333EA'};   // small text on white: B #15803D, V #C2410C
@@ -128,20 +141,28 @@ Error codes: `bad_token`, `expired`, `closed`, `locked`, `pin_required`, `pin_wr
 - Every mutating call bumps `settings.version` and writes `cs2.audit_log` (no player names in audit detail).
 
 ## 5. Front-end shell (lead-owned, already present)
-- `docs/js/config.js`: `SUPABASE_URL`, `SUPABASE_KEY`, `LEGACY_ANON_KEY`, `SITE_URL`, `BUILD`, `TZ='Asia/Ulaanbaatar'`.
+- `docs/js/config.js`: `SUPABASE_URL`, `SUPABASE_KEY`, `LEGACY_ANON_KEY`, `SITE_URL`, `BUILD`, `TZ='Asia/Ulaanbaatar'`;
+  school facts `SCHOOL='Octolearn London School'`, `FB_PAGE='Octolearn London School'`, `CONTACT_NAME='А.Мөнгөншагай'`,
+  `CONTACT_PHONES=['60114971','94741053']`, `CONTACT_PHONE='60114971, 94741053'` (display text only — build one `tel:` link per number from `CONTACT_PHONES`, e.g. `ui.phoneLinks()`; never strip the joined string into one `tel:`).
 - `docs/js/api.js`: `rpc(fn, args)` → parsed JSON (throws only on network/HTTP errors); helpers `publicState(version)`, `classGet(t)`, `classSave(t,p)`, `classConfirm(t,pin,attest)`, `refGet(t)`, `refReport(t,…)`, `adminSetup`, `adminLogin`, `adminLogout`, `admin(session, action, args)`.
 - `docs/js/store.js`: `store.get()` latest public state; `store.subscribe(fn)`; polling every 20 s (TV/draw pages call `store.setInterval(5000)`), pauses when tab hidden, version short-circuit; `store.refresh()`.
 - `docs/js/router.js`: routes `#/`, `#/rules`, `#/schedule`, `#/groups`, `#/bracket`, `#/faq`, `#/downloads`, `#/privacy`, `#/draw`, `#/tv`, `#/k/<token>`, `#/ref/<token>`, `#/admin`, `#/print/<kind>`; each page module `docs/js/pages/<name>.js` exports `default async function render(root, params)` and may return a cleanup function. Unknown → home. Page modules are lazy-imported.
-- `docs/js/ui.js`: `h(tag, attrs, ...children)` (sets text via textContent; attrs `class`, `style`, `on*`, `dataset`); `fmtTime(iso)` → `09:45`; `fmtDate(iso)` → `10.24 (Бямба)`; `fmtCountdown(ms)` → `2 хоног 04:12:09`; `toast(msg, kind)`; `teamName(state,id)`; `groupChip(grp)`; `stationLabel(st)`; `loading(root)`; `errorBox(root, msg)`; `copyText(str)`.
+- `docs/js/ui.js`: `h(tag, attrs, ...children)` (sets text via textContent; attrs `class`, `style`, `on*`, `dataset`); `fmtTime(iso)` → `09:45`; `fmtDate(iso)` → `10.24 (Бямба)`; `fmtCountdown(ms)` → `2 хоног 04:12:09`; `toast(msg, kind)`; `teamName(state,id)`; `groupChip(grp)`; `stationLabel(st)`; `loading(root)`; `errorBox(root, msg)`; `copyText(str)`; `mnt(n)` → `120 000 ₮` (no-break spaces); `phoneLinks()` → organiser phones as separate `tel:` links.
+- Header: school logo `docs/assets/img/logo-64.png` (srcset `logo-192.png`) + «Сургуулийн аварга / CS2 2026» + school name; favicon and apple-touch-icon `logo-192.png`. `icon.svg` (trophy) is no longer used by the public shell.
 - Never use `innerHTML` with data from the API. `content/*.html` static fragments may be injected with `innerHTML` (they contain no user data).
 - Design tokens in `docs/css/app.css`: navy `#1F2A44`, ink `#111827`, muted `#6B7280`, line `#E5E7EB`, gold `#B8860B` / light `#FEF3C7`, group colours above; body 17 px system font stack; tap targets ≥ 44 px; max content width 720 px (TV/draw full width); `lang="mn"`.
 
 ## 6. Pages (behaviour summary — details in the builder prompts)
-Public: home, rules (10 summary cards), schedule (2 days, poster images + live table), groups (standings), bracket (tree on desktop, stacked on phone, podium), faq (12 Q&A), downloads, privacy, draw (projector: commit → numbers → animated reveal → verify panel), tv (now/next per station, standings/bracket rotation, `?overlay=1` minimal).
+Public: home (countdown, fee & prize-fund card, 5 steps, registration counts, key dates), rules (11 summary cards incl. «Хураамж» and «Шагнал»), schedule (2 days, poster images + live table), groups (standings), bracket (tree on desktop, stacked on phone, podium with cash prizes + MVP), faq (14 Q&A), downloads, privacy, draw (projector: commit → numbers → animated reveal → verify panel), tv (now/next per station, standings/bracket rotation, `?overlay=1` minimal).
+Home: the registration steps and counts are hidden after `roster_freeze_at` (10.23 23:59); anything labelled «сугалаа» uses `DRAW_AT`.
 Ops: class page (status steps, 6 player cards, autosave draft in localStorage, Steam tips, teacher PIN keypad, print summary, "Манай тоглолтууд" after the draw), referee page, admin (login/setup, dashboard, roster edit, consent grid + auto alias, locks, announcements, token & PIN issue → print QR class cards / PIN slips / site QR poster, draw console, results entry, group lot/approve, exports CSV (UTF-8 BOM, formula-injection safe), purge).
 
-## 7. Content facts (must match SPEC v4)
-12 teams (11 classes + Багш нарын баг), roster 6 (5+1), girls play in class teams, no fees; dates: registration 10.16 (Ба) 17:00, Steam drill 10.19–21, consent 10.21 (Лх) 17:00, draw 10.22 (Пү) 16:00, Day 1 10.24 (Бя) group stage 09:45–16:45, Day 2 10.25 (Ня) 09:30 QF, 13:00 SF, 14:45 final + 3rd, 16:15 awards; nothing after 18:00; MR12 = first to 13; group draw 12:12 allowed (3/1/0); knockout OT; >10 min late → 13:0; phones handed to referees; open Facebook stream «[Facebook хуудасны нэр]» with 90 s delay, game feed + casters only, aliases if no online consent, videos removed by 11.01; cup only to class teams (teachers' rule); awards: champion cup + gold medals + өргөмжлөл, 2nd silver + өргөмжлөл, 3rd bronze + өргөмжлөл; Valve Limited Game Tournament License — not an official Valve event; law name «Хүний хувийн мэдээлэл хамгаалах тухай хууль»; placeholders shown literally as `[Сургуулийн нэр]`, `[Facebook хуудасны нэр]`, `[Зохион байгуулагч багшийн нэр]`, `[Утас]` (configured in `config.js` → `SCHOOL`, `FB_PAGE`, `CONTACT_NAME`, `CONTACT_PHONE`).
+## 7. Content facts (must match SPEC v5)
+Name «Сургуулийн аварга – CS2 2026» (cup: «Сургуулийн аварга» шилжин явах цом; title «Сургуулийн аварга анги»); school Octolearn London School; organiser А.Мөнгөншагай, утас 60114971, 94741053 (requests and questions go to the organiser);
+12 teams (11 classes + Багш нарын баг), roster 6 (5+1), girls play in class teams;
+team fee 120 000 ₮ per class team (≈20 000 ₮ per player), teachers' team pays no fee; paid by the captain or a class representative to the school accountant (cash or transfer, receipt) by 10.23 (Ба) 17:00; homeroom teachers never collect money; unpaid class team does not play (0:13 technical losses); full refund only if the tournament is cancelled; paid classes announced on the portal (admin «Зарлал») and in the managers' chat; public report after the event;
+prize fund 1 200 000 ₮ (class ranking): 1st 600 000, 2nd 360 000, 3rd 240 000 ₮ (shared equally by 6 players: 100 000 / 60 000 / 40 000 ₮; captain signs the prize register at the closing), in addition to cup/medals/өргөмжлөл; MVP «Тэмцээний шилдэг тоглогч (MVP)» = small cup + 100 000 ₮ + өргөмжлөл, class-team players only, chosen by the chief referee and the committee from all matches' statistics, announced at the closing; all fees go to prizes (11 × 120 000 = 1 320 000 = 1 200 000 + 100 000 + 20 000); no other awards, no participation certificates; «Skin, item, бооцоо байхгүй»;
+dates: QR cards + PIN slips 10.15–10.16, Steam drill 10.19–23, draw commit 10.21, draw 10.22 (Пү) 16:00 (each class sends its captain or a representative; does not freeze rosters), consent 05 + 05б, paper form 04 and fee 10.23 (Ба) 17:00, online registration = roster freeze 10.23 (Ба) 23:59, Day 1 10.24 (Бя) group stage 09:45–16:45, Day 2 10.25 (Ня) 09:30 QF, 13:00 SF, 14:45 final + 3rd, 16:15 awards; nothing after 18:00; MR12 = first to 13; group draw 12:12 allowed (3/1/0); knockout OT; >10 min late → 13:0; phones handed to referees; open Facebook stream on the school's Page «Octolearn London School» with 90 s delay, game feed + casters only, aliases if no online consent, videos removed by 11.01; cup, medals and cash only to class teams (teachers' rule); Valve Limited Game Tournament License — not an official Valve event; law name «Хүний хувийн мэдээлэл хамгаалах тухай хууль». School facts come from `config.js` (`SCHOOL`, `FB_PAGE`, `CONTACT_NAME`, `CONTACT_PHONES`); no `[...]` placeholders on the public site.
 
 ## 8. Testing duties
 - Logic: `node --test portal/tests` (draw vector, scores, standings incl. 12:12 & 3-way ties & lot, bracket resolution, class places for teachers out / win final / lose final / win 3rd / lose 3rd, same-group meeting property).

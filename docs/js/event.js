@@ -1,4 +1,4 @@
-// «Ангийн аварга – CS2 2026» — тэмцээний тогтмол өгөгдөл (CONTRACT §2, SPEC v4 §3, §7).
+// «Сургуулийн аварга – CS2 2026» — тэмцээний тогтмол өгөгдөл (CONTRACT §2, SPEC v5 §2, §2a, §3, §5, §7).
 // Pure data module: no DOM, no dependencies; works in browsers and Node >= 22.
 // The SQL seed mirrors TEAMS and MATCHES — change both together.
 // Every export is deep-frozen: copy before you modify (e.g. `MATCHES.map((m) => ({ ...m }))`).
@@ -10,6 +10,45 @@ const deepFreeze = (o) => {
   }
   return o;
 };
+
+/** Event name (SPEC v5 §1), transferable cup name and champion title (SPEC v5 §0, §5). */
+export const EVENT_NAME = 'Сургуулийн аварга – CS2 2026';
+export const CUP_NAME = 'Сургуулийн аварга';
+export const CHAMPION_TITLE = 'Сургуулийн аварга анги';
+
+/**
+ * Key dates (SPEC v5 §2, §3, §13), ISO +08:00 (Asia/Ulaanbaatar).
+ * reg_closes_at, roster_freeze_at and consent_deadline_at equal the cs2.settings values after migration 12;
+ * pages prefer the live settings and fall back to these. The draw does NOT freeze rosters:
+ * anything labelled «сугалаа» uses draw_at, never roster_freeze_at.
+ */
+export const DATES = deepFreeze({
+  reg_closes_at: '2026-10-23T23:59:59+08:00',        // online registration closes (class QR + PIN)
+  roster_freeze_at: '2026-10-23T23:59:59+08:00',     // roster freeze = registration close
+  consent_deadline_at: '2026-10-23T17:00:00+08:00',  // paper consent 05 + 05б, paper form 04
+  fee_due_at: '2026-10-23T17:00:00+08:00',           // team fee to the school accountant
+  drill_from: '2026-10-19T00:00:00+08:00',           // Steam QR login drills 10.19–10.23
+  drill_to: '2026-10-23T18:00:00+08:00',
+  draw_commit_on: '2026-10-21T00:00:00+08:00',       // commit (SHA-256) published on the portal
+  draw_at: '2026-10-22T16:00:00+08:00',              // technical meeting + group draw
+  links_expire_at: '2026-10-25T18:00:00+08:00',      // class and referee links
+});
+
+/** Group draw time (10.22 (Пү) 16:00). */
+export const DRAW_AT = DATES.draw_at;
+
+/**
+ * Team fee and prize fund in ₮ (SPEC v5 §2a, §5, §10B). The teachers' team pays no fee and gets no cash.
+ * 11 × 120 000 = 1 320 000 = fund 1 200 000 (600 000 / 360 000 / 240 000) + MVP 100 000 + small MVP cup 20 000.
+ */
+export const FEE = deepFreeze({ team: 120000, per_player: 20000, teams: 11, total: 1320000 });
+export const PRIZES = deepFreeze({
+  fund: 1200000,
+  place: [600000, 360000, 240000],        // 1st, 2nd, 3rd class team
+  per_player: [100000, 60000, 40000],     // shared equally among the 6 players
+  mvp_cash: 100000,
+  mvp_cup: 20000,
+});
 
 /** Group keys (Latin, internal). Show them with GROUP_LABEL. */
 export const GROUPS = deepFreeze(['A', 'B', 'V', 'G']);

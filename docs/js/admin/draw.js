@@ -8,13 +8,13 @@ import {
   toCsv, manualGroupsError, fileStamp, shortDateTime, SEAT_CYR, DRAW_GROUPS,
 } from './util.js';
 import { sha256Hex, computeDraw, parseDrawNum } from '../logic.js';
-import { DRAW_ORDER } from '../event.js';
+import { DRAW_ORDER, EVENT_NAME } from '../event.js';
 
 const sameGroups = (a, b) => !!a && !!b && DRAW_GROUPS.every((g) => JSON.stringify(a[g] || []) === JSON.stringify(b[g] || []));
 
 function secretFileText(v) {
   return [
-    'Ангийн аварга – CS2 2026 — сугалааны нууц тоо',
+    `${EVENT_NAME} — сугалааны нууц тоо`,
     '',
     `Нууц тоо (secret): ${v.secret}`,
     `Commit (sha256): ${v.commit}`,

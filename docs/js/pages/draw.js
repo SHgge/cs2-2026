@@ -3,11 +3,10 @@
 // (сагс сагсаар 4 хэсэгт үзүүлнэ; Space/товшилт/автомат) → «Шалгах» (logic.computeDraw-аар дахин тооцоолно).
 import { h, clear, fmtCountdown } from '../ui.js';
 import { store } from '../store.js';
-import { TEAMS, GROUPS, GROUP_LABEL } from '../event.js';
+import { TEAMS, GROUPS, GROUP_LABEL, EVENT_NAME, DRAW_AT } from '../event.js';
 import { computeDraw, sha256Hex, drawInputsString } from '../logic.js';
 import { makeClock, nameByCode, tms, safe } from './schedule.js';
 
-const DRAW_AT = '2026-10-22T16:00:00+08:00';
 const POT_NAME = { 1: '1-р сагс', 2: '2-р сагс', 3: '3-р сагс' };
 const STATUS_TEXT = {
   none: ['Эхлээгүй', 'pub-muted'],
@@ -24,7 +23,7 @@ const chunk = (hex) => (String(hex || '').match(/.{1,16}/g) || []);
 function howSteps(doneUpTo) {
   const items = [
     'Зохион байгуулагч нууц тоогоо урьдчилан битүүмжилж (SHA-256), энд нийтэлнэ.',
-    'Баг бүрийн ахлагч 0–9999 хооронд дурын тоо бичнэ.',
+    'Баг бүрийн ахлагч (эсвэл ангийн төлөөлөгч) 0–9999 хооронд дурын тоо бичнэ.',
     'Нууц тоо ба ахлагчдын тоогоор хэсгүүд гарна. Хэн ч дахин тооцоолж шалгаж болно.',
   ];
   return h('ol', { class: 'steps dr-how' }, items.map((t, i) => h('li', { class: i < doneUpTo ? 'done' : '' }, t)));
@@ -105,7 +104,7 @@ export default async function render(root, params = {}) {
   root.appendChild(h('div', { class: 'dr' },
     h('header', { class: 'dr-top' },
       h('a', { class: 'dr-back', href: '#/' }, '‹ Нүүр'),
-      h('div', { class: 'dr-title' }, h('b', {}, 'Хэсгийн сугалаа'), h('span', {}, 'Ангийн аварга – CS2 2026')),
+      h('div', { class: 'dr-title' }, h('b', {}, 'Хэсгийн сугалаа'), h('span', {}, EVENT_NAME)),
       statusChip, netChip, fsBtn),
     main, live));
 
@@ -214,7 +213,10 @@ export default async function render(root, params = {}) {
       if (!el) return;
       const on = i < step;
       el.classList.toggle('on', on);
-      el.querySelector('.dr-slot-n').textContent = on ? nameByCode(state, s.code) : '';
+      const nm = on ? nameByCode(state, s.code) : '';
+      const nEl = el.querySelector('.dr-slot-n');
+      nEl.textContent = nm;
+      nEl.classList.toggle('long', [...nm].length > 6);   // «Багш нарын баг»: smaller on phones, no mid-word break
       const k = keyOf(s.code);
       el.querySelector('.dr-slot-k').textContent = on && k ? short(k, 8) : '';
       el.classList.remove('pop');

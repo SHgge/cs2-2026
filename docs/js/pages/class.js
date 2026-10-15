@@ -2,16 +2,18 @@
 // Бүртгэл (6 тоглогч), ноорог, багшийн PIN баталгаажуулалт, зөвлөмж, хэвлэх, сугалааны дараа «Манай тоглолтууд».
 // API-аас ирсэн өгөгдлийг ЗӨВХӨН ui.h (textContent)-ээр DOM-д оруулна. innerHTML ашиглахгүй.
 import { classGet, classSave, classConfirm, errorText } from '../api.js';
-import { h, fmtTime, fmtDate, fmtCountdown, toast, teamName, groupChip, stationLabel, copyText } from '../ui.js';
+import { h, fmtTime, fmtDate, fmtCountdown, toast, teamName, groupChip, stationLabel, copyText, mnt, phoneLinks } from '../ui.js';
 import { store } from '../store.js';
 import { SCHOOL, CONTACT_NAME, CONTACT_PHONE } from '../config.js';
+import { EVENT_NAME, DATES, FEE, PRIZES } from '../event.js';
 
 const TOKEN_KEY = 'cs2.k.token';
 const DRAFT_PREFIX = 'cs2.k.draft.';
 const DRAFT_TTL_MS = 14 * 24 * 3600 * 1000;
 const POLL_MS = 60000;
-const DEFAULT_CONSENT_AT = '2026-10-21T17:00:00+08:00';
-const DEFAULT_REG_CLOSES = '2026-10-16T17:00:00+08:00';
+// SPEC v5 §2: paper consent 05 + 05б and paper form 04 by 10.23 (Ба) 17:00; online registration = roster freeze 10.23 (Ба) 23:59.
+const DEFAULT_CONSENT_AT = '2026-10-23T17:00:00+08:00';
+const DEFAULT_REG_CLOSES = '2026-10-23T23:59:59+08:00';
 const SLOTS = [1, 2, 3, 4, 5, 6];
 const FIELDS = ['first_name', 'surname_initial', 'steam_nickname', 'steam_id64', 'is_captain', 'age13'];
 const RE_LETTER = /[A-Za-zÀ-ÖØ-öø-ÿЀ-ӿ]/;
@@ -262,7 +264,7 @@ export function generalMessage(item, isT) {
     case 'captain_multi': return 'Ахлагч зөвхөн нэг байна.';
     case 'age13': return isT ? `${n || ''} тоглогчийн «Ажилтан, 18+»-ийг тэмдэглээгүй байна.`.trim()
       : `${n || ''} тоглогчийн 13+ насыг тэмдэглээгүй байна.`.trim();
-    case 'steam_id_missing': return s(`${n} тоглогчийн SteamID дутуу. 10.21 хүртэл нөхөж болно.`, `${n} тоглогчийн SteamID дутуу. 10.21 хүртэл нөхөж болно.`);
+    case 'steam_id_missing': return `${n} тоглогчийн SteamID дутуу. Бүртгэл хаагдах хүртэл нөхөж болно.`;
     default: break;
   }
   // серверийн ерөнхий алдаа {slot, field, code}
@@ -526,7 +528,7 @@ function createClassPage(root, params) {
     S.team = r.team || { id: null, code: 'x', name: '' };
     S.isT = !!S.team.is_teachers;
     if (r.now) { const t = Date.parse(r.now); if (!Number.isNaN(t)) S.offset = t - Date.now(); }
-    document.title = `${S.team.name || 'Баг'} — бүртгэл · Ангийн аварга – CS2 2026`;
+    document.title = `${S.team.name || 'Баг'} — бүртгэл · ${EVENT_NAME}`;
     const serverForm = formFromPlayers(r.players, S.team);
     const sameRoster = !first && r.version === S.baseVersion && formKey(serverForm, S.team) === formKey(S.base, S.team);
     if (!first && !opts.resetForm && isDirty()) {
@@ -636,7 +638,7 @@ function createClassPage(root, params) {
     el.draft = h('div', { class: 'card warn k-draftnote', role: 'status', hidden: true });
     el.form = h('section', { class: 'k-form', 'aria-labelledby': 'k-form-h' });
     el.confirm = h('section', { class: 'card k-confirm', 'aria-labelledby': 'k-confirm-h' });
-    root.append(el.hero, el.matches, el.window, el.status, el.draft, el.form, el.confirm, toolsCard(), tipsSection());
+    add(root, el.hero, el.matches, el.window, el.status, S.isT ? null : feeCard(), el.draft, el.form, el.confirm, toolsCard(), tipsSection());
     renderStatus();
     renderWindow();
     renderDraftNote();
@@ -691,7 +693,7 @@ function createClassPage(root, params) {
       },
     });
     return h('header', { class: 'hero k-hero' },
-      h('p', { class: 'k-kicker' }, 'Ангийн аварга – CS2 2026 · Бүртгэл'),
+      h('p', { class: 'k-kicker' }, `${EVENT_NAME} · Бүртгэл`),
       h('h1', { class: 'k-team' }, S.isT ? (t.name || 'Багш нарын баг') : `${t.name} анги`),
       h('p', { class: 'muted k-sub' }, S.isT ? 'Зөвхөн танай багийн хуудас. Холбоосыг багийнхандаа л өгнө үү.'
         : 'Зөвхөн танай ангийн хуудас. Холбоосыг ангийнхандаа л хуваалцаарай.'),
@@ -769,10 +771,19 @@ function createClassPage(root, params) {
 
   /* ---------- render: deadline / window messages ---------- */
   function contactLine() {
-    const phone = String(CONTACT_PHONE || '');
-    const digits = phone.replace(/[^\d+]/g, '');
-    return h('p', { class: 'small k-contact' }, 'Холбоо барих: ', CONTACT_NAME, ', ',
-      /\d{6,}/.test(digits) ? h('a', { href: `tel:${digits}` }, phone) : phone);
+    return h('p', { class: 'small k-contact' }, 'Холбоо барих: зохион байгуулагч ', CONTACT_NAME, ', утас ', phoneLinks());
+  }
+
+  /** Багийн хураамж, шагналын сан — зөвхөн ангийн багт (SPEC v5 §2a, §5). Багш нарын баг хураамж төлөхгүй. */
+  function feeCard() {
+    const [p1, p2, p3] = PRIZES.place.map(mnt);
+    return h('section', { class: 'card k-fee', 'aria-labelledby': 'k-fee-h' },
+      h('h2', { id: 'k-fee-h', class: 'k-fee-h' }, 'Хураамж, шагнал'),
+      h('p', { class: 'k-fee-main' }, h('b', {}, `Багийн хураамж ${mnt(FEE.team)}`),
+        ` — ахлагч ${dt(DATES.fee_due_at)} хүртэл сургуулийн нягтлан бодогчид төлж, баримт авна. `,
+        h('b', {}, 'Хураамж төлөөгүй баг тоглохгүй.')),
+      h('p', { class: 'k-fee-prize small' },
+        `Шагналын сан ${mnt(PRIZES.fund)}: 1-р байр ${p1} · 2-р байр ${p2} · 3-р байр ${p3} · MVP ${mnt(PRIZES.mvp_cash)} + жижиг цом.`));
   }
 
   function renderWindow() {
@@ -785,7 +796,7 @@ function createClassPage(root, params) {
       const cd = h('div', { class: 'countdown k-countdown' });
       const box = h('div', { class: 'card k-deadline' },
         h('div', { class: 'k-deadline-label' }, reason === 'confirmed' ? 'Засах боломж дуусах хүртэл' : 'Бүртгэл хаагдах хүртэл'),
-        cd, h('div', { class: 'small muted' }, `${dt(w.closes_at)} цагт хаагдана.`));
+        cd, h('div', { class: 'small muted' }, `${dt(w.closes_at)} цагт хаагдаж, бүрэлдэхүүн царцана.`));
       el.window.append(box);
       const target = Date.parse(w.closes_at);
       const tick = () => {
@@ -831,8 +842,9 @@ function createClassPage(root, params) {
         };
       case 'frozen':
         return {
-          kind: 'info', title: 'Бүрэлдэхүүн тогтсон', contact: true,
-          text: 'Сугалаа явагдсан. Одоо зөвхөн бүртгэлтэй нөөц тоглогчоор солино.',
+          kind: 'info', title: 'Бүрэлдэхүүн царцсан', contact: true,
+          text: say('Бүртгэл хаагдаж, бүрэлдэхүүн царцсан. Одоо зөвхөн бүртгэлтэй нөөц тоглогчоор солино. Онцгой тохиолдолд зохион байгуулагчид хандаарай.',
+            'Бүртгэл хаагдаж, бүрэлдэхүүн царцсан. Одоо зөвхөн бүртгэлтэй нөөц тоглогчоор солино. Онцгой тохиолдолд зохион байгуулагчид хандана уу.'),
         };
       default:
         return null;
@@ -975,7 +987,7 @@ function createClassPage(root, params) {
       h('div', { class: 'k-f' },
         h('label', { for: id('steam_id64') }, 'SteamID64 ', h('span', { class: 'k-opt' }, '(заавал биш)')),
         h('div', { class: 'k-sid' }, sid, counter),
-        h('div', { class: 'small muted k-hint', id: `${id('sid')}-hint` }, '7656119… гэж эхэлсэн 17 оронтой тоо. 10.21-ний Steam дадлага хүртэл нөхөж болно.'),
+        h('div', { class: 'small muted k-hint', id: `${id('sid')}-hint` }, '7656119… гэж эхэлсэн 17 оронтой тоо. Бүртгэл хаагдах хүртэл нөхөж болно.'),
         errEl('steam_id64')),
       h('div', { class: 'k-player-foot' },
         h('label', { class: 'k-switch', for: id('age13') }, age, h('span', { class: 'k-switch-ui', 'aria-hidden': 'true' }),
@@ -1499,7 +1511,7 @@ function createClassPage(root, params) {
     const now = new Date(Date.now() + S.offset).toISOString();
     const dots = '.'.repeat(36);
     return h('section', { class: 'k-print', 'aria-hidden': 'true' },
-      h('p', { class: 'kp-top' }, `${SCHOOL} · «Ангийн аварга – CS2 2026»`, h('span', {}, 'Маягт 04 · онлайн бүртгэлийн хураангуй')),
+      h('p', { class: 'kp-top' }, `${SCHOOL} · «${EVENT_NAME}»`, h('span', {}, 'Маягт 04 · онлайн бүртгэлийн хураангуй')),
       h('h1', {}, isT ? 'УДИРДЛАГА, БАГШ НАРЫН БАГИЙН МЭДҮҮЛЭГ' : 'БАГИЙН МЭДҮҮЛЭГ'),
       h('p', { class: 'kp-sub' }, isT ? 'Багийн нэр: «Удирдлага, багш нарын баг»' : `Анги (бүлэг): ${t.name}   ·   Багийн нэр: «${t.name}»`),
       h('table', { class: 'kp-table' }, h('thead', {}, h('tr', {}, head.map((x) => h('th', {}, x)))), h('tbody', {}, rows)),
@@ -1512,14 +1524,17 @@ function createClassPage(root, params) {
         `   ·   Хэвлэсэн: ${dt(now)}   ·   Хувилбар: ${d.version != null ? d.version : '—'}`),
       h('p', { class: 'kp-h' }, 'Баталгаа:'),
       h('ul', { class: 'kp-attest' }, attestItems().map(([, text]) => h('li', {}, `☐ ${text}`))),
-      h('p', { class: 'kp-rule' }, 'Бүрэлдэхүүнийг 2026.10.22-ны техникийн зөвлөгөөн хүртэл өөрчилж болно; түүнээс хойш зөвхөн бүртгэлтэй нөөц тоглогчоор солино.'),
+      h('p', { class: 'kp-rule' }, `Бүрэлдэхүүнийг ${dt(regDeadline())} хүртэл өөрчилж болно; түүнээс хойш бүрэлдэхүүн царцаж, зөвхөн бүртгэлтэй нөөц тоглогчоор солино.`),
       isT
         ? h('div', { class: 'kp-sign' }, h('p', {}, `Багийн ахлагч: ${dots}   Гарын үсэг: ${dots}   Огноо: 2026.10.____`))
         : h('div', { class: 'kp-sign' },
           h('p', {}, `Багийн ахлагч: ${dots}   Гарын үсэг: ${dots}`),
           h('p', {}, `Багийн менежер (анги удирдсан багш): ${dots}   Утас: ${'.'.repeat(24)}`),
           h('p', {}, `Гарын үсэг: ${dots}   Огноо: 2026.10.____`)),
-      h('p', { class: 'kp-deadline' }, `Хүлээлгэн өгөх хугацаа: ${dt(regDeadline())} — Зохион байгуулах хорооны нарийн бичиг ${CONTACT_NAME}.`),
+      h('p', { class: 'kp-fee' }, isT
+        ? 'Хураамж: хамаарахгүй — Багш нарын баг тэмцээний хураамж төлөхгүй (мөнгөн шагналд оролцохгүй).'
+        : `Хураамж ${mnt(FEE.team)}: ахлагч эсвэл ангийн төлөөлөгч ${dt(DATES.fee_due_at)}-аас өмнө сургуулийн нягтлан бодогчид төлж, баримт авна. Баримтын № ${'.'.repeat(20)}   Огноо: 2026.10.____`),
+      h('p', { class: 'kp-deadline' }, `Хүлээлгэн өгөх хугацаа: ${dt(consentDeadline())} — Зохион байгуулах хорооны нарийн бичиг ${CONTACT_NAME} (утас ${CONTACT_PHONE}).`),
       h('div', { class: 'kp-received' }, 'ХҮЛЭЭН АВСАН (Зохион байгуулах хороо): нарийн бичиг ........................   Огноо: 2026.10.____   Цаг: ____:____'));
   }
 
@@ -1544,7 +1559,7 @@ function createClassPage(root, params) {
         'Лабын компьютер дээр Steam-ийн нэвтрэх цонхонд QR код гарна.',
         say('Аппын Steam Guard хэсгээс QR-ыг уншуулж, «Approve» дараарай.', 'Аппын Steam Guard хэсгээс QR-ыг уншуулж, «Approve» дарна уу.'),
         say('«Remember me»-г үргэлж унтраалттай байлгаарай.', '«Remember me»-г үргэлж унтраалттай байлгана уу.'),
-        'Нэвтрэх дадлага: 10.19–10.21, хичээлийн дараа.',
+        'Нэвтрэх дадлага: 10.19–10.23, хичээлийн дараа.',
         say('Тоглолтын дараа Steam-ээс заавал гараарай.', 'Тоглолтын дараа Steam-ээс заавал гарна уу.'),
       ]),
       tip('Steam нэрээ өөрчлөх', [
@@ -1561,7 +1576,7 @@ function createClassPage(root, params) {
         say('«Steam ID: 7656119…» гэсэн 17 оронтой тоог хуулаарай.', '«Steam ID: 7656119…» гэсэн 17 оронтой тоог хуулна уу.'),
         'Профайлын холбоос steamcommunity.com/profiles/7656119… байвал бүтнээр нь буулгаж болно. Тоо автоматаар танигдана.',
         '«/id/…» хэлбэрийн холбоосоос ID гарахгүй.',
-        '10.21-ний Steam дадлага хүртэл нөхөж болно.',
+        `Бүртгэл хаагдах ${dt(regDeadline())} хүртэл нөхөж болно.`,
       ]),
       tip('Тэмцээнд юу авчрах вэ', [
         'Цэнэглэсэн утас (Steam Mobile апптай). Тоглолтын үед утсаа шүүгчид хадгалуулна.',

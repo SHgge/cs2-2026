@@ -204,38 +204,57 @@ details.adm-sec > summary { font-size: 1.05rem; }
 .pr-grid-pins { grid-auto-rows: 45mm; }
 .pr-grid-refs { grid-auto-rows: 135mm; }
 .pr-cell { border-right: .3mm dashed #9CA3AF; border-bottom: .3mm dashed #9CA3AF; overflow: hidden; break-inside: avoid; }
-.pr-top { display: flex; justify-content: space-between; gap: 2mm; font-size: 7.5pt; color: #6B7280; text-transform: uppercase; letter-spacing: .02em; }
 .pr-steps { margin: 0; padding-left: 5mm; font-size: 9.5pt; line-height: 1.3; display: grid; gap: 1.5mm; }
 .pr-warn { font-size: 8.5pt; font-weight: 700; color: #B91C1C; background: #FEF2F2; border: .3mm solid #FCA5A5; border-radius: 2mm; padding: 1.2mm 2mm; }
 
-/* class card */
-.pr-card { padding: 4.5mm 5mm; display: flex; flex-direction: column; gap: 2mm; }
-.pr-card-name { font-size: 30pt; font-weight: 800; line-height: 1; color: #1F2A44; }
-.pr-card-name.long { font-size: 20pt; line-height: 1.5; }
-.pr-card-body { display: flex; gap: 4mm; align-items: flex-start; }
+/* school brand row (SPEC v5: logo + «Octolearn London School» on every printed card/slip) */
+.pr-brand { display: flex; align-items: center; gap: 2mm; min-width: 0; }
+.pr-logo { flex: 0 0 auto; display: block; width: 7mm; height: 7mm; border-radius: 1.2mm; }
+.pr-brand-text { display: flex; flex-direction: column; min-width: 0; line-height: 1.2; }
+.pr-brand-text b { font-size: 8pt; font-weight: 800; color: #0D0447; letter-spacing: .01em; }
+.pr-brand-text span { font-size: 7pt; color: #4B5563; }
+.pr-brand-tag { margin-left: auto; align-self: flex-start; font-size: 7pt; color: #6B7280; text-transform: uppercase; letter-spacing: .02em; text-align: right; }
+
+/* class card (94.5 × 90 mm) */
+.pr-card { padding: 4mm 5mm; display: flex; flex-direction: column; gap: 1.5mm; }
+.pr-card-name { font-size: 28pt; font-weight: 800; line-height: 1; color: #1F2A44; }
+.pr-card-name.long { font-size: 20pt; line-height: 1.25; }
+.pr-card-body { display: flex; gap: 3.5mm; align-items: flex-start; }
 .pr-qr-card { flex: 0 0 44mm; width: 44mm; height: 44mm; }
+.pr-card .pr-steps { font-size: 8.5pt; line-height: 1.25; gap: 1.2mm; }
 .pr-card-deadline { font-size: 11pt; font-weight: 700; margin-top: auto; }
+.pr-card .pr-warn { padding: 1mm 2mm; }
 
-/* teacher PIN slip */
-.pr-pin { padding: 4mm 5mm; display: flex; flex-direction: column; gap: 1.5mm; }
-.pr-pin-line { display: flex; flex-wrap: wrap; align-items: baseline; gap: 1.5mm; font-size: 13pt; }
-.pr-pin-team { font-size: 17pt; color: #1F2A44; }
-.pr-pin-code { font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; font-size: 21pt; letter-spacing: .12em; }
-.pr-pin-warn { font-size: 11pt; font-weight: 800; color: #B91C1C; }
-.pr-pin-note { margin: 0; font-size: 8pt; line-height: 1.3; color: #374151; }
+/* teacher PIN slip (94.5 × 45 mm): brand / team + warning | PIN / note */
+.pr-pin {
+  padding: 3.5mm 5mm; display: grid; grid-template-columns: minmax(0, 1fr) auto; align-content: start; column-gap: 4mm; row-gap: 1.2mm;
+  grid-template-areas: "brand brand" "team code" "warn code" "note note";
+}
+.pr-pin .pr-brand { grid-area: brand; }
+.pr-pin .pr-logo { width: 6mm; height: 6mm; }
+.pr-pin-team { grid-area: team; align-self: end; font-size: 17pt; line-height: 1.15; color: #1F2A44; overflow-wrap: anywhere; }
+.pr-pin-team.long { font-size: 14pt; }
+.pr-pin-codebox { grid-area: code; display: flex; flex-direction: column; align-items: flex-end; justify-content: center; text-align: right; }
+.pr-pin-label { font-size: 8.5pt; font-weight: 600; color: #374151; }
+.pr-pin-code { font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; font-size: 22pt; line-height: 1.15; letter-spacing: .12em; margin-right: -.12em; }
+.pr-pin-warn { grid-area: warn; align-self: start; font-size: 10.5pt; font-weight: 800; color: #B91C1C; }
+.pr-pin-note { grid-area: note; margin: .6mm 0 0; font-size: 8pt; line-height: 1.3; color: #374151; }
 
-/* referee slip */
-.pr-ref { padding: 5mm 6mm; display: flex; flex-direction: column; align-items: center; text-align: center; gap: 2.5mm; }
-.pr-ref .pr-top { align-self: stretch; }
+/* referee slip (94.5 × 135 mm) */
+.pr-ref { padding: 5mm 6mm; display: flex; flex-direction: column; align-items: center; text-align: center; gap: 2.2mm; }
+.pr-ref .pr-brand { align-self: stretch; text-align: left; }
+.pr-ref .pr-logo { width: 9mm; height: 9mm; }
 .pr-ref-label { font-size: 20pt; font-weight: 800; color: #1F2A44; line-height: 1.15; }
 .pr-ref-station { font-size: 11pt; font-weight: 600; }
-.pr-qr-ref { width: 56mm; height: 56mm; }
+.pr-qr-ref { width: 54mm; height: 54mm; }
 .pr-ref-valid { font-size: 10pt; font-weight: 700; }
 .pr-ref .pr-steps { text-align: left; }
 
-/* site poster */
-.pr-site { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 4mm; padding-top: 16mm; }
-.pr-site-school { font-size: 14pt; color: #374151; }
+/* site poster (A4) */
+.pr-site { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 4mm; padding-top: 12mm; }
+.pr-site-brand { display: flex; flex-direction: column; align-items: center; gap: 2mm; }
+.pr-site-logo { display: block; width: 22mm; height: 22mm; border-radius: 3mm; }
+.pr-site-school { font-size: 15pt; font-weight: 800; color: #0D0447; letter-spacing: .02em; }
 .pr-site-title { font-size: 40pt; line-height: 1.05; margin: 0; color: #1F2A44; }
 .pr-site-title span { color: #B8860B; }
 .pr-site-sub { font-size: 15pt; margin: 0; }
@@ -245,9 +264,11 @@ details.adm-sec > summary { font-size: 1.05rem; }
 .pr-site-url { font-size: 14pt; margin: 0; font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; }
 .pr-site-list { list-style: none; padding: 0; margin: 0; font-size: 12pt; display: flex; flex-wrap: wrap; justify-content: center; gap: 2mm 6mm; }
 .pr-site-list li::before { content: "✓ "; color: #15803D; font-weight: 800; }
-.pr-site-foot { margin: auto 0 0; font-size: 9pt; color: #6B7280; }
+.pr-site-prize { margin: 0; font-size: 12pt; font-weight: 700; color: #8A6508; text-wrap: balance; }
+.pr-site-foot { margin: auto 0 0; font-size: 9pt; color: #6B7280; text-wrap: balance; }
 
 /* draw secret */
+.pr-secret .pr-logo { width: 9mm; height: 9mm; }
 .pr-secret h1 { font-size: 24pt; margin: 6mm 0 2mm; }
 .pr-secret-box { font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; font-size: 20pt; line-height: 1.6; letter-spacing: .04em; word-spacing: .3em; padding: 6mm; margin: 6mm 0; border: .6mm solid #1F2A44; border-radius: 3mm; }
 .pr-secret-commit { font-size: 9pt; word-break: break-all; }

@@ -7,6 +7,7 @@ import { readFileSync } from 'node:fs';
 import * as L from '../docs/js/logic.js';
 import {
   GROUPS, GROUP_LABEL, GROUP_COLOR, STATION_LABEL, STAGE_LABEL, TEAMS, DRAW_ORDER, MATCHES, DAY_INFO,
+  EVENT_NAME, CUP_NAME, CHAMPION_TITLE, DATES, DRAW_AT, FEE, PRIZES,
 } from '../docs/js/event.js';
 import {
   VECTOR, ID, SEAT, makeState, match, setResult, playGroup, playGroupOrder, playAllGroups, playKO, mulberry32, randomHex,
@@ -91,6 +92,37 @@ describe('event.js', () => {
     });
   });
 
+  test('SPEC v5: name, deadlines (= migration 12), draw does not freeze rosters', () => {
+    assert.equal(EVENT_NAME, 'Сургуулийн аварга – CS2 2026');
+    assert.equal(CUP_NAME, 'Сургуулийн аварга');
+    assert.equal(CHAMPION_TITLE, 'Сургуулийн аварга анги');
+    assert.equal(DATES.reg_closes_at, '2026-10-23T23:59:59+08:00');
+    assert.equal(DATES.roster_freeze_at, DATES.reg_closes_at);
+    assert.equal(DATES.consent_deadline_at, '2026-10-23T17:00:00+08:00');
+    assert.equal(DATES.fee_due_at, DATES.consent_deadline_at);
+    assert.equal(DRAW_AT, '2026-10-22T16:00:00+08:00');
+    assert.ok(Date.parse(DRAW_AT) < Date.parse(DATES.roster_freeze_at), 'draw happens before the roster freeze');
+    assert.ok(Date.parse(DATES.roster_freeze_at) < Date.parse(MATCHES[0].start));
+    for (const v of Object.values(DATES)) assert.match(v, /^2026-10-\d\dT\d\d:\d\d:\d\d\+08:00$/);
+    const sql = readFileSync(new URL('../supabase/migrations/12_v5_name_deadlines.sql', import.meta.url), 'utf8');
+    for (const k of ['reg_closes_at', 'consent_deadline_at', 'roster_freeze_at']) {
+      assert.match(sql, new RegExp(`${k}\\s*=\\s*'${DATES[k].replace(/[+]/g, '\\+')}'`), `migration 12 ${k}`);
+    }
+  });
+
+  test('SPEC v5: team fee 11 × 120 000 = prize fund + MVP cash + MVP cup (balance 0)', () => {
+    assert.equal(FEE.team, 120000);
+    assert.equal(FEE.teams, TEAMS.filter((t) => !t.is_teachers).length);
+    assert.equal(FEE.team * FEE.teams, FEE.total);
+    assert.equal(FEE.total, 1320000);
+    assert.deepEqual(PRIZES.place, [600000, 360000, 240000]);
+    assert.equal(PRIZES.place.reduce((a, b) => a + b, 0), PRIZES.fund);
+    assert.equal(PRIZES.fund, 1200000);
+    assert.deepEqual(PRIZES.place.map((v) => v / 6), PRIZES.per_player);
+    assert.equal(PRIZES.fund + PRIZES.mvp_cash + PRIZES.mvp_cup, FEE.total);
+    for (const x of [DATES, FEE, PRIZES, PRIZES.place]) assert.ok(Object.isFrozen(x));
+  });
+
   test('DAY_INFO blocks and frozen exports', () => {
     assert.deepEqual(DAY_INFO.d1.map((x) => x[0]), ['08:30', '09:00', '09:30', '12:45', '16:45']);
     assert.deepEqual(DAY_INFO.d2.map((x) => x[0]), ['08:30', '08:45', '12:00', '14:15', '16:15']);
@@ -115,7 +147,7 @@ describe('sha256Hex', () => {
   test('known vectors, UTF-8, lowercase hex', async () => {
     assert.equal(await L.sha256Hex(''), EMPTY);
     assert.equal(await L.sha256Hex('abc'), ABC);
-    assert.equal(await L.sha256Hex('Ангийн аварга – CS2 2026'), refHash('Ангийн аварга – CS2 2026'));
+    assert.equal(await L.sha256Hex('Сургуулийн аварга – CS2 2026'), refHash('Сургуулийн аварга – CS2 2026'));
     assert.match(await L.sha256Hex('x'), /^[0-9a-f]{64}$/);
     await assert.rejects(L.sha256Hex(42), TypeError);
     await assert.rejects(L.sha256Hex(null), TypeError);

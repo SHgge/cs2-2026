@@ -1,16 +1,21 @@
-// Нүүр: нэр, огноо, дараагийн алхам хүртэлх тоолуур, гол огноо, систем (5), «Яаж оролцох» (4),
-// бүртгэлийн явц (12 баг — зөвхөн тоо), «Шууд үзэх» (settings.stream_url байвал).
+// Нүүр: нэр, огноо, дараагийн алхам хүртэлх тоолуур, хураамж ба шагналын сан, «Яаж оролцох» (5),
+// бүртгэлийн явц (12 баг — зөвхөн тоо), гол огноо, систем (6), «Шууд үзэх» (settings.stream_url байвал).
 // logic.js-ээс шууд хамаарахгүй (тэмцээний өдрүүдэд л schedule.js-ийг динамикаар ачаална).
-import { h, clear, fmtTime, fmtDate, fmtCountdown, contentFragment } from '../ui.js';
+// SPEC v5: бүртгэл = бүрэлдэхүүн царцах 10.23 (Ба) 23:59 (settings.roster_freeze_at); сугалаа 10.22 (Пү) 16:00
+// (event.js DRAW_AT) бүрэлдэхүүнийг царцаахгүй.
+import { h, clear, fmtTime, fmtDate, fmtCountdown, contentFragment, mnt } from '../ui.js';
 import { store } from '../store.js';
 import { SCHOOL } from '../config.js';
+import { EVENT_NAME, DATES, DRAW_AT, FEE, PRIZES } from '../event.js';
 import { fillConfig } from './rules.js';
 
 const DEF = {
-  reg: '2026-10-16T17:00:00+08:00',
-  consent: '2026-10-21T17:00:00+08:00',
-  draw: '2026-10-22T16:00:00+08:00',
-  drill: '2026-10-21T18:00:00+08:00',
+  reg: DATES.reg_closes_at,
+  freeze: DATES.roster_freeze_at,
+  consent: DATES.consent_deadline_at,
+  fee: DATES.fee_due_at,
+  draw: DRAW_AT,
+  drill: DATES.drill_to,
   day1: '2026-10-24T09:00:00+08:00',
   day1End: '2026-10-24T18:00:00+08:00',
   day2Start: '2026-10-25T08:30:00+08:00',
@@ -23,25 +28,34 @@ const dShort = (iso) => fmtDate(iso).replace(/\(([^)]+)\)/, (_, w) => `(${WD_SHO
 const dt = (iso) => `${dShort(iso)} ${fmtTime(iso)}`;
 const validIso = (v, def) => (v && Number.isFinite(Date.parse(v)) ? v : def);
 
+/** Сугалааны цаг тогтмол (DRAW_AT); roster_freeze_at-ийг зөвхөн бүртгэл, бүрэлдэхүүн царцахад ашиглана. */
 function settingsOf(state) {
   const s = (state && state.settings) || {};
   return {
     reg: validIso(s.reg_closes_at, DEF.reg),
+    freeze: validIso(s.roster_freeze_at, DEF.freeze),
     consent: validIso(s.consent_deadline_at, DEF.consent),
-    draw: validIso(s.roster_freeze_at, DEF.draw),
+    fee: DEF.fee,
+    draw: DEF.draw,
     open: s.registration_open,
     stream: s.stream_url,
   };
 }
 
+const same = (a, b) => t(a) === t(b);
+
+/** Тоолуурын дараагийн алхмууд, цагийн дарааллаар. */
 function milestones(s) {
+  const sameDue = same(s.consent, s.fee);
   return [
-    { at: s.reg, label: 'Бүртгэл хаагдах хүртэл' },
-    { at: s.consent, label: 'Эцэг эхийн зөвшөөрөл өгөх хугацаа дуусах хүртэл' },
-    { at: s.draw, label: 'Сугалаа хүртэл' },
+    { at: s.draw, label: 'Хэсгийн сугалаа хүртэл' },
+    { at: s.consent, label: sameDue ? 'Зөвшөөрөл, хураамж өгөх хугацаа дуусах хүртэл' : 'Эцэг эхийн зөвшөөрөл өгөх хугацаа дуусах хүртэл' },
+    sameDue ? null : { at: s.fee, label: 'Багийн хураамж төлөх хугацаа дуусах хүртэл' },
+    { at: s.reg, label: same(s.reg, s.freeze) ? 'Бүртгэл хаагдаж, бүрэлдэхүүн царцах хүртэл' : 'Бүртгэл хаагдах хүртэл' },
+    same(s.reg, s.freeze) ? null : { at: s.freeze, label: 'Бүрэлдэхүүн царцах хүртэл' },
     { at: DEF.day1, label: 'Тэмцээн эхлэх хүртэл' },
     { at: DEF.day2, label: '2-р өдөр эхлэх хүртэл' },
-  ];
+  ].filter(Boolean).sort((a, b) => t(a.at) - t(b.at));
 }
 
 /** Финал (19), 3-р байр (20) хоёулаа баталгаажсан уу (logic-гүйгээр төлөвөөс шууд). */
@@ -65,21 +79,47 @@ function streamBtn(s) {
 }
 
 function keyDates(s, now) {
+  const sameDue = same(s.consent, s.fee);
+  const sameFreeze = same(s.reg, s.freeze);
   const items = [
-    { end: s.reg, when: dt(s.reg), text: 'Бүртгэл хаагдана (ангийн QR)' },
-    { end: DEF.drill, when: '10.19–21', text: 'Steam-ээр QR нэвтрэх дадлага' },
-    { end: s.consent, when: dt(s.consent), text: 'Эцэг эхийн зөвшөөрөл (маягт 05, 05б) өгөх эцсийн хугацаа' },
-    { end: s.draw, when: dt(s.draw), text: 'Техникийн зөвлөгөөн, хэсгийн сугалаа' },
+    { end: DEF.drill, when: '10.19–23', text: 'Steam-ээр QR нэвтрэх дадлага' },
+    { end: s.draw, when: dt(s.draw), text: 'Техникийн зөвлөгөөн, хэсгийн сугалаа. Анги бүрээс ахлагч эсвэл төлөөлөгч ирнэ' },
+    { end: s.consent, when: dt(s.consent), text: sameDue
+      ? `Эцэг эхийн зөвшөөрөл (05, 05б), цаасан маягт 04, багийн хураамж ${mnt(FEE.team)}`
+      : 'Эцэг эхийн зөвшөөрөл (05, 05б), цаасан маягт 04' },
+    sameDue ? null : { end: s.fee, when: dt(s.fee), text: `Багийн хураамж ${mnt(FEE.team)}` },
+    { end: s.reg, when: dt(s.reg), text: sameFreeze ? 'Онлайн бүртгэл хаагдана, бүрэлдэхүүн царцана' : 'Онлайн бүртгэл хаагдана (ангийн QR)' },
+    sameFreeze ? null : { end: s.freeze, when: dt(s.freeze), text: 'Бүрэлдэхүүн царцана' },
     { end: DEF.day1End, when: '10.24 (Бя) 09:45–16:45', text: '1-р өдөр: хэсгийн шат. Бүртгэл 08:30, нээлт 09:00' },
     { end: DEF.day2End, when: '10.25 (Ня) 09:30', text: '2-р өдөр: шөвгийн 8 · 13:00 шөвгийн 4 · 14:45 финал, 3-р байр · 16:15 шагнал' },
   ];
   return h('section', { class: 'hm-sec' },
     h('h2', {}, 'Гол огноо'),
-    h('ul', { class: 'hm-dates' }, items.map((it) => {
+    h('ul', { class: 'hm-dates' }, items.filter(Boolean).map((it) => {
       const past = now >= t(it.end);
       return h('li', { class: past ? 'past' : '' },
         h('b', {}, it.when), h('span', {}, it.text), past ? h('span', { class: 'hm-done', 'aria-label': 'болсон' }, '✓') : null);
     })));
+}
+
+/** Хураамж ба шагналын сан (SPEC v5 §2a, §5) — тоо event.js-ээс. */
+function prizeCard(s) {
+  const titles = ['Аварга', '2-р байр', '3-р байр'];
+  return h('section', { class: 'card hm-prize', 'aria-labelledby': 'hm-prize-h' },
+    h('h2', { id: 'hm-prize-h' }, 'Хураамж ба шагнал'),
+    h('div', { class: 'hm-fee' },
+      h('span', { class: 'hm-fee-l' }, 'Багийн хураамж'),
+      h('b', { class: 'hm-fee-v' }, mnt(FEE.team), h('small', {}, ' / анги')),
+      h('span', { class: 'hm-fee-d' }, `${dt(s.fee)} хүртэл сургуулийн нягтлан бодогчид төлж, баримт авна`)),
+    h('p', { class: 'hm-fund' }, 'Шагналын сан ', h('b', {}, mnt(PRIZES.fund))),
+    h('ol', { class: 'hm-places' }, PRIZES.place.map((v, i) => h('li', { class: `hm-place p${i + 1}` },
+      h('span', { class: 'hm-place-n' }, titles[i]),
+      h('b', { class: 'hm-place-v' }, mnt(v)),
+      h('span', { class: 'hm-place-pp' }, `тоглогч бүрд ${mnt(PRIZES.per_player[i])}`)))),
+    h('p', { class: 'hm-mvp' }, h('b', {}, 'MVP'), ` — тэмцээний шилдэг тоглогч: жижиг цом + ${mnt(PRIZES.mvp_cash)}`),
+    h('p', { class: 'small muted hm-prize-note' },
+      'Багш нарын баг хураамж төлөхгүй, мөнгөн шагнал авахгүй. Бүх хураамж шагналд зарцуулагдана. ',
+      h('a', { href: '#/rules' }, 'Дэлгэрэнгүй →')));
 }
 
 function regChip(team) {
@@ -116,7 +156,7 @@ const LINKS = [
   ['#/bracket', 'Схем', 'Шөвгийн 8 → финал'],
   ['#/rules', 'Удирдамж', 'Гол дүрэм'],
   ['#/draw', 'Сугалаа', '10.22, шалгах'],
-  ['#/faq', 'Асуулт, хариулт', '12 асуулт'],
+  ['#/faq', 'Асуулт, хариулт', '14 асуулт'],
   ['#/downloads', 'Татах', 'Маягт, хуваарь'],
   ['#/privacy', 'Хувийн мэдээлэл', 'Юу цуглуулах вэ'],
 ];
@@ -130,6 +170,7 @@ export default async function render(root) {
 
   const streamSlot = h('div', { class: 'hm-stream' });
   const nextSlot = h('div', {});
+  const prizeSlot = h('div', {});
   const liveSlot = h('div', { class: 'hm-livelist' });
   const stepsSlot = h('div', {});
   const regSlot = h('div', {});
@@ -141,11 +182,11 @@ export default async function render(root) {
   root.appendChild(h('div', { class: 'pub hm' },
     h('section', { class: 'hero hm-hero' },
       h('p', { class: 'hm-kicker' }, `${SCHOOL} · 8–12-р анги`),
-      h('h1', {}, 'Ангийн аварга – CS2 2026'),
+      h('h1', {}, EVENT_NAME),
       h('p', { class: 'hm-when' }, '2026.10.24–25 (Бямба, Ням)'),
       h('p', { class: 'muted' }, '12 баг · 20 тоглолт · Цомыг ганц баг өргөнө'),
       streamSlot),
-    noteSlot, nextSlot, stepsSlot, regSlot, datesSlot, formatSlot,
+    noteSlot, nextSlot, prizeSlot, stepsSlot, regSlot, datesSlot, formatSlot,
     h('nav', { class: 'hm-links', 'aria-label': 'Хуудсууд' },
       LINKS.map(([href, title, sub]) => h('a', { class: 'hm-link', href }, h('b', {}, title), h('span', {}, sub))))));
 
@@ -234,8 +275,10 @@ export default async function render(root) {
     }
     shownKey = '';
     drawNext(now);
-    // Сугалааны дараа (бүрэлдэхүүн түгжигдсэн) бүртгэлийн алхам, явцыг нууж, хуваарь, дүнг түрүүлж харуулна.
-    const frozen = now >= t(s.draw);
+    clear(prizeSlot);
+    prizeSlot.appendChild(prizeCard(s));
+    // Бүрэлдэхүүн царцсаны дараа (10.23 23:59; сугалаа биш) бүртгэлийн алхам, явцыг нууж, хуваарь, дүнг түрүүлж харуулна.
+    const frozen = now >= t(s.freeze);
     stepsSlot.hidden = frozen;
     clear(regSlot);
     const rb = offline || frozen ? null : regBlock(cur, s);

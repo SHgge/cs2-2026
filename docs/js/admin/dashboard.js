@@ -1,7 +1,8 @@
 // 1. Самбар — 12 багийн төлөв, хугацаа, шүүлтүүр, CSV/JSON татах.
 import { h, toast, fmtDateTime, fmtCountdown } from '../ui.js';
 import { btn, section, chip, download } from './core.js';
-import { toCsv, fileStamp, isFuture, matchzyWithAliases, consentRowsWithAliases } from './util.js';
+import { toCsv, fileStamp, isFuture, matchzyWithAliases, consentRowsWithAliases, mntText } from './util.js';
+import { DATES, FEE } from '../event.js';
 
 const nPlayers = (t) => (Array.isArray(t.players) ? t.players.length : Number((t.reg && t.reg.players) || 0));
 const nConsents = (t) => (Array.isArray(t.players) ? t.players.filter((p) => p.consent_paper === true).length : Number((t.reg && t.reg.consents) || 0));
@@ -97,11 +98,17 @@ export function render(panel, ctx, ui) {
     tile('Зөвшөөрөл (05)', `${totalC}/${totalP || teams.length * 6}`),
     tile('QR олгосон', `${tok}/${teams.length}`)));
 
+  // SPEC v5 §2, §2a: the draw (10.22) does not freeze rosters; registration closes = roster freeze (10.23 23:59).
+  const sameClose = !!S.reg_closes_at && Date.parse(S.reg_closes_at) === Date.parse(S.roster_freeze_at || '');
   panel.appendChild(section('Хугацаа',
     h('div', { class: 'row' }, chip(S.registration_open === false ? 'Бүртгэл хаалттай' : 'Бүртгэл нээлттэй', S.registration_open === false ? 'err' : 'ok')),
-    deadlineRow('Бүртгэл хаагдах', S.reg_closes_at),
-    deadlineRow('Зөвшөөрлийн хугацаа', S.consent_deadline_at),
-    deadlineRow('Сугалаа, бүрэлдэхүүн царцах', S.roster_freeze_at)));
+    deadlineRow('Сугалаа (техникийн зөвлөгөөн)', DATES.draw_at),
+    deadlineRow('Зөвшөөрөл (05, 05б), маягт 04', S.consent_deadline_at),
+    deadlineRow('Багийн хураамж (нягтлан бодогч)', DATES.fee_due_at),
+    sameClose
+      ? deadlineRow('Бүртгэл хаагдах, бүрэлдэхүүн царцах', S.reg_closes_at)
+      : [deadlineRow('Бүртгэл хаагдах', S.reg_closes_at), deadlineRow('Бүрэлдэхүүн царцах', S.roster_freeze_at)],
+    h('p', { class: 'muted small adm-mt' }, `Хураамж ${mntText(FEE.team)} / ангийн баг (Багш нарын баг төлөхгүй). Төлбөрийн бүртгэлийг Excel 08 «Багууд»-д хөтөлж, төлсөн ангиудыг «Зарлал»-аар нийтэлнэ.`)));
 
   const grid = h('div', { class: 'adm-teams' });
   const fill = () => {

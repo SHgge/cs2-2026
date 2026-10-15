@@ -1,5 +1,6 @@
 // Админы цэвэр туслах функцууд. DOM ашиглахгүй — Node-оор тестлэх боломжтой.
 import { SITE_URL, TZ } from '../config.js';
+import { EVENT_NAME, DATES, FEE } from '../event.js';
 
 /* ---------- CSV (UTF-8 BOM, formula-injection safe) ---------- */
 export const CSV_BOM = '\uFEFF';
@@ -44,9 +45,9 @@ function tzParts(iso) {
   return { y: o.year, m: o.month, d: o.day, hh: o.hour === '24' ? '00' : o.hour, mm: o.minute, wd };
 }
 
-/** '10.16 (Ба)' */
+/** '10.23 (Ба)' */
 export function shortDate(iso) { const p = tzParts(iso); return p ? `${p.m}.${p.d} (${WD_SHORT[p.wd]})` : ''; }
-/** '10.16 (Ба) 17:00' */
+/** '10.23 (Ба) 17:00' */
 export function shortDateTime(iso) { const p = tzParts(iso); return p ? `${p.m}.${p.d} (${WD_SHORT[p.wd]}) ${p.hh}:${p.mm}` : ''; }
 /** '2026-10-13_1604' — for file names */
 export function fileStamp(d = new Date()) { const p = tzParts(d); return p ? `${p.y}-${p.m}-${p.d}_${p.hh}${p.mm}` : 'x'; }
@@ -65,7 +66,8 @@ export function localInputToIso(v) {
 export function isFuture(iso, now = Date.now()) { const t = Date.parse(iso || ''); return Number.isFinite(t) && t > now; }
 
 /* ---------- links & messages ---------- */
-export const DEFAULT_REG_CLOSES = '2026-10-16T17:00:00+08:00';
+/** Fallbacks when the live settings are not loaded (SPEC v5 §2): online registration = roster freeze. */
+export const DEFAULT_REG_CLOSES = '2026-10-23T23:59:59+08:00';
 export const REF_VALID_FROM = '2026-10-24T07:00:00+08:00';
 export const REF_VALID_TO = '2026-10-25T18:00:00+08:00';
 
@@ -73,14 +75,20 @@ export const classLink = (token) => `${SITE_URL}#/k/${token}`;
 export const refLink = (token) => `${SITE_URL}#/ref/${token}`;
 export const siteLabel = () => SITE_URL.replace(/^https?:\/\//, '').replace(/\/$/, '');
 
+/** 120000 → '120 000 ₮' (no-break spaces, same as ui.mnt; kept here so this module stays DOM-free). */
+export function mntText(n) { return `${String(Math.round(Number(n) || 0)).replace(/\B(?=(\d{3})+(?!\d))/g, '\u00A0')}\u00A0₮`; }
+
+/** Team fee reminder for class teams (SPEC v5 §2a); the teachers' team pays no fee. */
+export const feeLine = () => `Багийн хураамж ${mntText(FEE.team)} — ахлагч ${shortDateTime(DATES.fee_due_at)} хүртэл сургуулийн нягтлан бодогчид төлж, баримт авна.`;
+
 /** Message the organiser forwards to a homeroom teacher → class chat (link only, no PIN). */
 export function classLinkMessage(item, deadline) {
   if (item.is_teachers) {
-    return `«Ангийн аварга – CS2 2026» — Багш нарын багийн бүртгэл: ${classLink(item.token)}\n`
+    return `«${EVENT_NAME}» — Багш нарын багийн бүртгэл: ${classLink(item.token)}\n`
       + `Хугацаа: ${deadline}. Холбоосыг зөвхөн багийн гишүүдэд хуваалцана уу.`;
   }
-  return `«Ангийн аварга – CS2 2026» — ${item.name} багийн бүртгэл: ${classLink(item.token)}\n`
-    + `Хугацаа: ${deadline}. Холбоосыг зөвхөн ангийн чатад хуваалцаарай.`;
+  return `«${EVENT_NAME}» — ${item.name} багийн бүртгэл: ${classLink(item.token)}\n`
+    + `Хугацаа: ${deadline}. Холбоосыг зөвхөн ангийн чатад хуваалцаарай.\n${feeLine()}`;
 }
 /** Teacher-only PIN line (sent separately from the link). The teachers' team PIN goes to its captain. */
 export function pinMessage(item) {
@@ -91,7 +99,7 @@ export function pinMessage(item) {
 
 export function linksList(items, deadline) {
   const rows = items.filter((i) => i.token).map((i) => `${i.name}: ${classLink(i.token)}`);
-  return `«Ангийн аварга – CS2 2026» — бүртгэлийн холбоосууд (хугацаа ${deadline})\n${rows.join('\n')}\n`;
+  return `«${EVENT_NAME}» — бүртгэлийн холбоосууд (хугацаа ${deadline})\n${rows.join('\n')}\n`;
 }
 export function pinsList(items) {
   const rows = items.filter((i) => i.pin).map((i) => `${i.name}${i.is_teachers ? ' (ахлагч)' : ''}: ${i.pin}`);
@@ -285,10 +293,10 @@ const FIELD_LABEL = {
   first_name: 'Нэр', surname_initial: 'Овгийн үсэг', steam_nickname: 'Steam нэр', steam_id64: 'SteamID64', is_captain: 'Ахлагч',
   age13: '13+ нас', slot: 'Тоглогч', players: 'Тоглогчид', reason: 'Шалтгаан', label: 'Нэр', secret: 'Нууц үг', text: 'Текст',
   stream_url: 'Холбоос', order: 'Дараалал', alias: 'Хоч нэр', until: 'Хугацаа', station: 'Станц', start: 'Цаг', status: 'Төлөв',
-  commit: 'Commit', team: 'Баг', forfeit: 'Техникийн ялагдал', action: 'Үйлдэл', grp: 'Хэсэг', approved: 'Батламж',
+  commit: 'Commit', team: 'Баг', forfeit: 'Техникийн ялагдал', action: 'Үйлдэл', grp: 'Хэсэг', approved: 'Батлалт',
   locked: 'Түгжээ', level: 'Төрөл', kind: 'Төрөл', phase: 'Үе шат', confirm: '«УСТГАХ»', inputs: 'Тоонууд', groups: 'Хэсгүүд',
   consent_paper: '05', consent_3a: '3а', consent_3b: '3б', consent_3v: '3в', registration_open: 'Бүртгэл',
-  reg_closes_at: 'Бүртгэл хаагдах', consent_deadline_at: 'Зөвшөөрлийн хугацаа', roster_freeze_at: 'Царцах хугацаа',
+  reg_closes_at: 'Бүртгэл хаагдах', consent_deadline_at: 'Зөвшөөрлийн хугацаа', roster_freeze_at: 'Бүрэлдэхүүн царцах',
   tokens_valid_until: 'Холбоосын хугацаа',
 };
 /** Short Mongolian summary of server validation errors (first 3). */

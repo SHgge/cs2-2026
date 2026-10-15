@@ -23,8 +23,8 @@ export function makeState({ drawStatus = 'published', groups = VECTOR.groups } =
     version: 1,
     now: '2026-10-24T08:00:00+08:00',
     settings: {
-      reg_closes_at: '2026-10-16T17:00:00+08:00', consent_deadline_at: '2026-10-21T17:00:00+08:00',
-      roster_freeze_at: '2026-10-22T16:00:00+08:00', registration_open: false, stream_url: null,
+      reg_closes_at: '2026-10-23T23:59:59+08:00', consent_deadline_at: '2026-10-23T17:00:00+08:00',
+      roster_freeze_at: '2026-10-23T23:59:59+08:00', registration_open: false, stream_url: null,
     },
     announcements: [],
     teams: TEAMS.map((t) => ({

@@ -1,4 +1,4 @@
-/* ===== Нийтийн хуудсууд — «Ангийн аварга – CS2 2026» (Public-UI builder) =====
+/* ===== Нийтийн хуудсууд — «Сургуулийн аварга – CS2 2026» (Public-UI builder) =====
    Суурь токенууд: css/app.css. Энд зөвхөн нийтийн хуудасны загвар. Mobile-first. */
 
 /* ---------- хэсгийн өнгө ---------- */
@@ -144,7 +144,7 @@ tr.gp-q td { background: var(--g-l); }
   background: linear-gradient(135deg, #A87A10, var(--gold-ink)); color: #fff; border-radius: 14px;
   padding: 12px 14px; text-align: center; box-shadow: var(--shadow);
 }
-.bk-champ-t { text-transform: uppercase; font-weight: 800; letter-spacing: .08em; font-size: 1.1rem; }
+.bk-champ-t { text-transform: uppercase; font-weight: 800; letter-spacing: .06em; font-size: .92rem; line-height: 1.25; }
 .bk-champ-n { font-size: 1.6rem; font-weight: 800; line-height: 1.2; }
 .bk-champ-p { font-size: .8rem; color: #FEF3C7; }
 .bk-legend { margin: 12px 0; }
@@ -189,6 +189,8 @@ tr.gp-q td { background: var(--g-l); }
 .pd-3 .pd-block { height: 76px; background: linear-gradient(#B4693A, #8F4F24); }
 .pd-prize { font-size: .78rem; color: var(--muted); margin-top: 6px; line-height: 1.3; }
 .pd-award { font-weight: 700; color: var(--gold-ink); }
+.pd-mvp { font-size: .92rem; margin: 10px 0 0; }
+.pd-mvp b { color: var(--gold-ink); }
 .pd-rule { background: var(--gold-l); border-radius: 12px; padding: 10px 12px; margin-top: 12px; }
 .pd-rule p { margin: 4px 0; font-size: .92rem; }
 
@@ -240,6 +242,36 @@ tr.gp-q td { background: var(--g-l); }
   border: 1px solid var(--line); border-radius: 12px; text-decoration: none; color: var(--navy);
 }
 .hm-link span { color: var(--muted); font-size: .82rem; }
+/* хураамж ба шагнал */
+.hm-prize { border-color: var(--gold); background: #FFFBEB; }
+.hm-prize h2 { margin-top: 0; }
+.hm-fee { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 10px; align-items: baseline; padding-bottom: 10px; border-bottom: 1px dashed #E7D9A8; }
+.hm-fee-l { font-weight: 700; color: var(--navy); }
+.hm-fee-v { font-size: 1.3rem; color: var(--navy); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.hm-fee-v small { font-size: .8rem; font-weight: 600; color: var(--muted); }
+.hm-fee-d { grid-column: 1 / -1; color: var(--muted); font-size: .85rem; }
+.hm-fund { margin: 10px 0 8px; font-weight: 700; color: var(--navy); }
+.hm-fund b { color: var(--gold-ink); font-size: 1.15rem; white-space: nowrap; }
+.hm-places { list-style: none; padding: 0; margin: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+.hm-place {
+  display: flex; flex-direction: column; align-items: center; text-align: center; padding: 8px 4px; border-radius: 10px;
+  background: #fff; border: 1px solid var(--line); border-top: 4px solid #94A3B8; min-width: 0;
+}
+.hm-place.p1 { border-top-color: var(--gold); }
+.hm-place.p3 { border-top-color: #B4693A; }
+.hm-place-n { font-size: .8rem; font-weight: 700; color: var(--muted); }
+.hm-place-v { font-size: 1rem; color: var(--ink); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.hm-place.p1 .hm-place-v { color: var(--gold-ink); font-size: 1.08rem; }
+.hm-place-pp { font-size: .72rem; color: var(--muted); line-height: 1.25; }
+.hm-mvp { margin: 10px 0 4px; }
+.hm-mvp b { color: var(--gold-ink); }
+.hm-prize-note { margin: 4px 0 0; }
+.fq-contact { margin: 6px 0 0 !important; }
+@media (min-width: 560px) {
+  .hm-place-v { font-size: 1.15rem; }
+  .hm-place.p1 .hm-place-v { font-size: 1.25rem; }
+  .hm-place-pp { font-size: .8rem; }
+}
 @media (min-width: 560px) {
   .hm-chips { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .hm-links { grid-template-columns: repeat(4, minmax(0, 1fr)); }
@@ -402,6 +434,7 @@ body.fullscreen a { color: #93C5FD; }
 @media (max-width: 760px) {
   .dr { font-size: 15px; }
   .dr-board { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .dr-slot-n.long { font-size: 1.35em; font-size: min(1.35em, 5.2vw); }   /* «Багш нарын баг»: whole words even at 320 px */
   .dr-inputs-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .dr-keysgrid { grid-template-columns: 1fr; }
   .dr-vrow { grid-template-columns: 1fr 2em; }
@@ -416,7 +449,7 @@ body.fullscreen a { color: #93C5FD; }
 }
 .tv-top { display: flex; align-items: center; justify-content: space-between; gap: 1em; }
 .tv-brand { display: flex; align-items: center; gap: .7em; min-width: 0; }
-.tv-brand img { width: 3.2em; height: 3.2em; }
+.tv-brand img { width: 3.2em; height: 3.2em; border-radius: .45em; box-shadow: 0 0 0 1px rgba(255, 255, 255, .18); }
 .tv-brand b { display: block; font-size: 1.8em; line-height: 1.1; }
 .tv-brand span { color: var(--dk-muted); }
 .tv-clock { text-align: right; font-variant-numeric: tabular-nums; }
@@ -448,8 +481,8 @@ body.fullscreen a { color: #93C5FD; }
 .tv-meta { color: var(--dk-muted); font-variant-numeric: tabular-nums; }
 .tv-next { display: flex; align-items: center; gap: .6em; flex-wrap: wrap; margin-top: .7em; padding-top: .6em; border-top: 1px solid var(--dk-line); }
 .tv-ntime { font-variant-numeric: tabular-nums; font-size: 1.2em; }
-.tv-nmatch { display: flex; gap: .5em; align-items: baseline; font-size: 1.25em; font-weight: 700; flex: 1; min-width: 0; }
-.tv-nmatch .tv-team { font-size: 1em; }
+.tv-nmatch { display: flex; gap: .5em; align-items: baseline; font-size: 1.25em; font-weight: 700; flex: 1 1 auto; min-width: 0; }   /* wraps to its own line instead of squeezing names */
+.tv-nmatch .tv-team { font-size: 1em; overflow-wrap: break-word; }
 .tv-nmatch .tv-vs, .tv-nmatch .tv-sc { font-size: .8em; }
 .tv-call {
   display: flex; align-items: center; gap: .4em 1em; flex-wrap: wrap; background: #FDE68A; color: #111827;
@@ -502,6 +535,15 @@ body.fullscreen a { color: #93C5FD; }
 @media (max-width: 900px) {
   .tv { font-size: 15px; }
   .tv-stations, .tv-groups { grid-template-columns: 1fr; }
+}
+@media (max-width: 600px) {   /* утсаар: нэр нэг мөрөнд, цаг доор баруун талд (давхцахгүй) */
+  .tv-top { flex-wrap: wrap; row-gap: .3em; }
+  .tv-brand { flex: 1 1 auto; }
+  .tv-brand img { width: 2.6em; height: 2.6em; }
+  .tv-brand b { font-size: 1.45em; }
+  .tv-clock { margin-left: auto; }
+  .tv-clock b { font-size: 2.4em; }
+  .tv-match .tv-team.long { font-size: min(2.1em, 9vw); }   /* «Багш нарын баг» keeps whole words at 320 px */
 }
 
 /* ---------- OBS доод мөр (?overlay=1) ---------- */

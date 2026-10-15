@@ -1,4 +1,4 @@
-// «Ангийн аварга – CS2 2026» — тэмцээний логик (CONTRACT §3).
+// «Сургуулийн аварга – CS2 2026» — тэмцээний логик (CONTRACT §3).
 // Pure ES module: no DOM, no dependencies besides ./event.js; runs in browsers and Node >= 22.
 // Works only with team ids/codes, scores and times — never with player data.
 import { GROUPS, GROUP_LABEL, TEAMS, DRAW_ORDER, MATCHES } from './event.js';

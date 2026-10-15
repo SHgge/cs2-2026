@@ -1,4 +1,4 @@
-/* ===== Base design system — «Ангийн аварга – CS2 2026» (lead-owned) ===== */
+/* ===== Base design system — «Сургуулийн аварга – CS2 2026» ===== */
 :root {
   --navy: #1F2A44; --navy-2: #334155; --ink: #111827; --muted: #6B7280; --line: #E5E7EB; --bg: #F8FAFC; --card: #FFFFFF;
   --gold: #B8860B; --gold-ink: #8A6508; --gold-l: #FEF3C7;
@@ -26,9 +26,18 @@ h1 { font-size: 1.6rem; } h2 { font-size: 1.3rem; } h3 { font-size: 1.1rem; }
 
 /* ---- layout ---- */
 .topbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 16px; background: var(--navy); color: #fff; position: sticky; top: 0; z-index: 20; }
-.brand { display: flex; align-items: center; gap: 10px; color: #fff; text-decoration: none; font-weight: 700; min-height: 44px; margin: -6px 0; }   /* 44-px tap target, same header height */
-.brand-text b { color: #FCD34D; }
-.school { color: #CBD5E1; font-size: .85rem; text-align: right; }
+.brand { display: flex; align-items: center; gap: 10px; color: #fff; text-decoration: none; font-weight: 700; min-height: 44px; margin: -6px 0; min-width: 0; }   /* 44-px tap target, same header height */
+.brand-logo { flex: 0 0 auto; width: 36px; height: 36px; border-radius: 8px; box-shadow: 0 0 0 1px rgba(255, 255, 255, .18); }
+.brand-text { display: flex; flex-direction: column; line-height: 1.15; min-width: 0; white-space: nowrap; }
+.brand-text > span { font-size: .95rem; }
+.brand-text b { color: #FCD34D; font-size: .85rem; letter-spacing: .04em; }
+.school { color: #CBD5E1; font-size: .8rem; line-height: 1.2; text-align: right; max-width: 9.5em; }
+.tel { white-space: nowrap; }
+@media (min-width: 560px) {
+  .brand-text > span { font-size: 1.05rem; }
+  .brand-text b { font-size: .9rem; }
+  .school { font-size: .88rem; max-width: none; }
+}
 .wrap { max-width: 720px; margin: 0 auto; padding: 16px; outline: none; }
 .footer { max-width: 720px; margin: 24px auto 0; padding: 16px; color: var(--muted); font-size: .85rem; text-align: center; }
 .tabbar {

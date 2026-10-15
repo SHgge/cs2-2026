@@ -1,4 +1,4 @@
-/* ===== Ops pages: class team (#/k) and referee (#/ref) — «Ангийн аварга – CS2 2026» =====
+/* ===== Ops pages: class team (#/k) and referee (#/ref) — «Сургуулийн аварга – CS2 2026» =====
    Prefixes: .ops-* shared (modal, PIN keypad) · .k-* class page · .r-* referee page.
    Base tokens & components come from app.css (lead-owned). */
 
@@ -104,6 +104,12 @@ body[data-page="class"] .toasts .toast:nth-last-child(n+3), body[data-page="ref"
 .k-wmsg p { margin: .3em 0 0; }
 .k-wmsg.info { border-color: #93C5FD; background: #EFF6FF; }
 .k-contact { margin-top: 6px; }
+
+/* team fee + prize fund (class teams only) */
+.k-fee { border-color: var(--gold); background: #FFFBEB; padding-top: 12px; padding-bottom: 12px; }
+.k-fee-h { font-size: 1rem; margin: 0 0 4px; color: var(--gold-ink); }
+.k-fee p { margin: 0; line-height: 1.4; }
+.k-fee .k-fee-prize { margin-top: 6px; color: var(--ink); }
 .k-draftnote p { margin: .3em 0 .6em; }
 
 /* form */
@@ -232,7 +238,8 @@ body[data-page="class"] .toasts .toast:nth-last-child(n+3), body[data-page="ref"
   .k-print .kp-attest { list-style: none; padding: 0; margin: 0 0 2mm; font-size: 9.5pt; }
   .k-print .kp-attest li { margin: 1mm 0; }
   .k-print .kp-sign p { margin: 5mm 0; }
-  .k-print .kp-deadline { font-size: 9.5pt; font-weight: 700; margin: 4mm 0 2mm; }
+  .k-print .kp-fee { font-size: 9pt; margin: 2mm 0 0; }
+  .k-print .kp-deadline { font-size: 9.5pt; font-weight: 700; margin: 3mm 0 2mm; }
   .k-print .kp-received { border: 1px solid #000; background: #F2F2F2; padding: 3mm; font-size: 9pt; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 }
 

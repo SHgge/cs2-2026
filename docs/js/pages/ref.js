@@ -6,7 +6,7 @@ import { refGet, refReport, errorText } from '../api.js';
 import { h, fmtTime, fmtDate, toast, teamName, stationLabel } from '../ui.js';
 import { store } from '../store.js';
 import { validScore, resolveMatches, fmtScore, srcLabel as logicSrcLabel } from '../logic.js';
-import { MATCHES, GROUP_LABEL } from '../event.js';
+import { MATCHES, GROUP_LABEL, EVENT_NAME } from '../event.js';
 
 const TOKEN_KEY = 'cs2.ref.token';
 const Q_PREFIX = 'cs2.ref.q.';
@@ -241,7 +241,7 @@ function createRefPage(root, params) {
     if (!S.token) { renderNoToken(); return; }
     S.tag = tokenTag(S.token);
     S.q = readQueue();
-    document.title = 'Шүүгч · Ангийн аварга – CS2 2026';
+    document.title = `Шүүгч · ${EVENT_NAME}`;
     const c = readCache();
     if (c) {
       S.ref = c.ref;

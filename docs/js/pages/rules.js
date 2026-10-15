@@ -1,21 +1,21 @@
-// «Удирдамж»: 10 товч карт (content/rules.html) + бүтэн баримт (02, 06) татах холбоос.
+// «Удирдамж»: 11 товч карт (content/rules.html) + бүтэн баримт (02, 06) татах холбоос.
 // contentInto/fillConfig-ийг faq, privacy, home бас ашиглана.
-import { h, clear, contentFragment } from '../ui.js';
+import { h, clear, contentFragment, phoneLinks } from '../ui.js';
 import { SCHOOL, FB_PAGE, CONTACT_NAME, CONTACT_PHONE } from '../config.js';
+import { EVENT_NAME } from '../event.js';
 
-const CFG = { SCHOOL, FB_PAGE, CONTACT_NAME, CONTACT_PHONE };
+const CFG = { SCHOOL, FB_PAGE, CONTACT_NAME, CONTACT_PHONE, EVENT_NAME };
 
-/** Статик хэсгийн [data-cfg] нүдийг config.js-ийн утгаар (textContent) бөглөж, утасны холбоос үүсгэнэ. */
+/**
+ * Статик хэсгийн [data-cfg] нүдийг config.js-ийн утгаар (textContent) бөглөнө.
+ * [data-tel] нүдийг утасны дугаар бүрийн тусдаа tel: холбоосоор солино (2 дугаар).
+ */
 export function fillConfig(el) {
   for (const n of el.querySelectorAll('[data-cfg]')) {
     const v = CFG[n.dataset.cfg];
     if (v) n.textContent = v;
   }
-  const tel = String(CONTACT_PHONE || '').replace(/[^\d+]/g, '');
-  for (const a of el.querySelectorAll('a[data-tel]')) {
-    if (tel.replace(/\D/g, '').length >= 6) a.setAttribute('href', `tel:${tel}`);
-    else a.removeAttribute('href');
-  }
+  for (const n of el.querySelectorAll('[data-tel]')) n.replaceWith(phoneLinks());
 }
 
 /** content/<name>.html-ийг slot руу ачаална. Хуудас солигдсон бол юу ч хийхгүй. */

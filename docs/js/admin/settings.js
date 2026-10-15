@@ -49,6 +49,7 @@ function announcements(ctx) {
   const list = st.announcements || [];
   return section('Зарлал',
     h('p', { class: 'muted small' }, 'Бүх хуудасны дээд хэсэгт тууз болж харагдана. Нэр, утас бүү бичнэ үү.'),
+    h('p', { class: 'muted small' }, 'Хураамж төлсөн ангиудыг (Excel 08 «Багууд») энд зарлалаар нийтэлж, менежерүүдийн чатад илгээнэ. Жишээ: «Хураамж төлсөн ангиуд (10.23 17:00): 8а, 9б, 12а.»'),
     h('label', { for: 'adm-ann' }, 'Шинэ зарлал'), text,
     h('div', { class: 'row adm-mt' }, level, left, h('span', { class: 'spacer' }),
       btn('Нийтлэх', async () => {
@@ -99,13 +100,15 @@ function settingsBox(ctx) {
 
 const DEADLINES = [
   ['reg_closes_at', 'Бүртгэл хаагдах'],
-  ['consent_deadline_at', 'Зөвшөөрлийн хугацаа'],
-  ['roster_freeze_at', 'Бүрэлдэхүүн царцах (сугалаа)'],
+  ['consent_deadline_at', 'Зөвшөөрөл (05, 05б), маягт 04'],
+  ['roster_freeze_at', 'Бүрэлдэхүүн царцах'],
 ];
+/** The inputs show whole minutes: 23:59:59 (SPEC v5 close/freeze) must not count as a change to 23:59. */
+const sameMinute = (a, b) => Math.floor(Date.parse(a || '') / 60000) === Math.floor(Date.parse(b || '') / 60000);
 /** Rarely needed: move a deadline for everyone (one class → «Бүртгэл» → «хүртэл нээх»). */
 function deadlinesBox(ctx, S) {
   const inputs = DEADLINES.map(([key, label]) => {
-    const inp = h('input', { type: 'datetime-local', step: 300, id: `adm-dl-${key}` });
+    const inp = h('input', { type: 'datetime-local', step: 60, id: `adm-dl-${key}` });
     inp.value = isoToLocalInput(S[key]);
     inp.addEventListener('change', () => ctx.setDirty(true));
     return { key, label, inp };
@@ -113,13 +116,14 @@ function deadlinesBox(ctx, S) {
   return h('details', { class: 'adm-mt' },
     h('summary', {}, 'Хугацаа өөрчлөх (шийдвэр гарсан үед л)'),
     h('p', { class: 'muted small' }, 'Бүх ангид үйлчилнэ. Нэг ангид бол «Бүртгэл» хэсгийн «хүртэл нээх»-ийг ашиглана уу.'),
+    h('p', { class: 'muted small' }, 'Бүртгэл хаагдах цаг нь бүрэлдэхүүн царцах цагтай ижил байна. Нэгийг нь өөрчилбөл нөгөөг нь мөн адил өөрчилнө үү. Сугалаа бүрэлдэхүүнийг царцаахгүй.'),
     h('div', { class: 'adm-dl-grid' }, inputs.map(({ key, label, inp }) => h('label', { for: `adm-dl-${key}` }, label, inp))),
     h('div', { class: 'row adm-mt' }, btn('Хугацаа хадгалах', async () => {
       const args = {};
       for (const { key, inp } of inputs) {
         const iso = localInputToIso(inp.value);
         if (!iso) { toast('Огноо, цагаа бүрэн оруулна уу.', 'err'); inp.focus(); return; }
-        if (Date.parse(iso) !== Date.parse(S[key] || '')) args[key] = iso;
+        if (!sameMinute(iso, S[key])) args[key] = iso;
       }
       const keys = Object.keys(args);
       if (!keys.length) { toast('Өөрчлөлт алга.', 'warn'); return; }

@@ -1,7 +1,7 @@
 // «Схем» хуудас: шөвгийн 8 → шөвгийн 4 → финал + 3-р байр. Утсанд дараалсан, ≥900px-д мод хэлбэртэй.
 // Шагналын тавцан: зөвхөн ангийн баг (багш нарын дүрэм). bracketTree-г tv.js бас ашиглана.
-import { h, clear, fmtTime } from '../ui.js';
-import { STATION_LABEL } from '../event.js';
+import { h, clear, fmtTime, mnt } from '../ui.js';
+import { STATION_LABEL, CHAMPION_TITLE, PRIZES } from '../event.js';
 import { finalRanking } from '../logic.js';
 import {
   bindState, makeClock, mergedMatches, offlineNote, publicView, safe, teamLabel, sideInfo,
@@ -41,9 +41,9 @@ export function placesOf(state) {
 function championBox(state, places) {
   const name = teamLabel(state, places[0]);
   return h('div', { class: `bk-champ${name ? ' won' : ''}` },
-    h('div', { class: 'bk-champ-t' }, 'Аварга'),
+    h('div', { class: 'bk-champ-t' }, CHAMPION_TITLE),
     h('div', { class: 'bk-champ-n' }, name || '?'),
-    h('div', { class: 'bk-champ-p' }, 'Шилжин явах цом · алтан медаль · өргөмжлөл'));
+    h('div', { class: 'bk-champ-p' }, `Шилжин явах цом · алтан медаль · өргөмжлөл · ${mnt(PRIZES.place[0])}`));
 }
 
 /** Хасагдах шатны мод. compact = ТВ. */
@@ -75,17 +75,19 @@ export function podium(state) {
   return h('section', { class: 'card pd-wrap', 'aria-label': 'Шагналт байр' },
     h('h2', {}, 'Шагналт байр'),
     h('div', { class: 'pd' },
-      step(2, '2-р байр', 'Мөнгөн медаль, өргөмжлөл'),
-      step(1, 'Аварга', 'Шилжин явах цом, алтан медаль, өргөмжлөл'),
-      step(3, '3-р байр', 'Хүрэл медаль, өргөмжлөл')),
+      step(2, '2-р байр', `Мөнгөн медаль, өргөмжлөл, ${mnt(PRIZES.place[1])}`),
+      step(1, 'Аварга', `Шилжин явах цом, алтан медаль, өргөмжлөл, ${mnt(PRIZES.place[0])}`),
+      step(3, '3-р байр', `Хүрэл медаль, өргөмжлөл, ${mnt(PRIZES.place[2])}`)),
     places.every((x) => x != null) ? null
       : h('p', { class: 'muted small center' }, 'Финал, 3-р байрын тоглолт 10.25 (Ня) 14:45-д. Дүн баталгаажмагц энд гарна.'),
+    h('p', { class: 'pd-mvp' }, h('b', {}, 'Тэмцээний шилдэг тоглогч (MVP): '),
+      `жижиг цом, ${mnt(PRIZES.mvp_cash)}, өргөмжлөл. Зөвхөн ангийн багийн тоглогчдоос сонгож, хаалтын ёслолд зарлана.`),
     award ? h('p', { class: 'pd-award' }, award === 'honor'
       ? 'Багш нарын баг: «Хүндэт байр» өргөмжлөл (шөвгийн 4-т шалгарсан).'
       : 'Багш нарын баг: «Тусгай өргөмжлөл».') : null,
     h('div', { class: 'pd-rule' },
       h('b', {}, 'Багш нарын багийн дүрэм'),
-      h('p', {}, 'Цом, медалийг зөвхөн ангийн баг авна. Цомыг ганц баг өргөнө.'),
+      h('p', {}, 'Цом, медаль, мөнгөн шагналыг зөвхөн ангийн баг авна. Цомыг ганц баг өргөнө.'),
       h('p', {}, 'Багш нарын баг түрүүлбэл финалд ялагдсан анги аварга болно. 3-р байрын тоглолтын ялагч 2-р, ялагдагч 3-р байр эзэлнэ.'),
       h('p', {}, 'Багш нарын баг шөвгийн 4-т ялагдвал 3-р байрын тоглолтод тэдэнтэй тоглосон анги 3-р байр эзэлнэ.')));
 }

@@ -4,7 +4,7 @@
 import { h, clear, fmtTime, fmtDate } from '../ui.js';
 import { store } from '../store.js';
 import { SCHOOL, FB_PAGE } from '../config.js';
-import { GROUPS, STATION_LABEL } from '../event.js';
+import { GROUPS, STATION_LABEL, EVENT_NAME, CUP_NAME } from '../event.js';
 import {
   makeClock, mergedMatches, stationNowNext, nextWave, sideInfo, scoreText, isDone, statusOf, stageTag,
   fallbackState, ubDay, fmtDateShort, winnerSide,
@@ -56,8 +56,8 @@ export default async function render(root, params = {}) {
     root.appendChild(h('div', { class: 'tv' },
       h('header', { class: 'tv-top' },
         h('div', { class: 'tv-brand' },
-          h('img', { src: 'assets/img/icon.svg', alt: '', width: '56', height: '56' }),
-          h('div', {}, h('b', {}, 'Ангийн аварга – CS2 2026'), h('span', {}, SCHOOL))),
+          h('img', { class: 'tv-logo', src: 'assets/img/logo-192.png', alt: '', width: '56', height: '56' }),
+          h('div', {}, h('b', {}, EVENT_NAME.replace(' 2026', '\u00A02026')), h('span', {}, SCHOOL))),
         h('div', { class: 'tv-clock', 'aria-label': 'Цаг' }, h('div', {}, clockMain, clockSec), clockDate)),
       stale, stationsBox, call,
       h('section', { class: 'tv-rot' }, h('div', { class: 'tv-rot-h' }, rotTitle, rotDots), rotBody),
@@ -156,7 +156,7 @@ export default async function render(root, params = {}) {
 
   function drawOverlay(now, rows, isStale) {
     clear(ovBox);
-    ovBox.appendChild(h('div', { class: 'ov-brand' }, h('b', {}, 'CS2 2026'), h('span', {}, 'Ангийн аварга')));
+    ovBox.appendChild(h('div', { class: 'ov-brand' }, h('b', {}, 'CS2 2026'), h('span', {}, CUP_NAME)));
     if (!isStale) {
       for (const s of stations) {
         const { current, next } = stationNowNext(rows, s, now);

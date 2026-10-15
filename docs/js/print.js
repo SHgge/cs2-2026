@@ -3,15 +3,19 @@
 //   cards  — ангийн QR карт (нэг хуудсанд 6), pins — багшийн PIN хуудас (12),
 //   ref    — шүүгчийн QR хуудас (4), secret — сугалааны нууц тоо.
 // Нууц кодыг зөвхөн санах ойгоос (admin/vault.js) уншина: хуудсыг шинэчилбэл устна.
-import { h, clear, errorBox } from './ui.js';
+import { h, clear, errorBox, mnt } from './ui.js';
 import { SITE_URL, SCHOOL, FB_PAGE } from './config.js';
+import { EVENT_NAME, CUP_NAME, FEE, PRIZES } from './event.js';
 import { vault } from './admin/vault.js';
 import { loadQr, qrNode } from './admin/qr.js';
 import {
   classLink, refLink, shortDateTime, secretGroups, siteLabel, chunk, DEFAULT_REG_CLOSES, REF_VALID_FROM, REF_VALID_TO,
 } from './admin/util.js';
 
-const TITLE = 'Ангийн аварга – CS2 2026';
+const TITLE = EVENT_NAME;
+/** School logo (SPEC v5 §0.5): white cube on navy; 192 px for the small cells, 512 px for the A4 poster. */
+const LOGO = 'assets/img/logo-192.png';
+const LOGO_BIG = 'assets/img/logo-512.png';
 const BACK_ACCESS = ['#/admin?tab=access', 'Админ руу буцах'];
 const NO_CODES = 'Хэвлэх код энэ цонхны санах ойд алга (хуудсыг шинэчилсэн эсвэл эрх олгоогүй). Админ → «Эрх, хэвлэх» хэсэгт эрх олгоод энэ хуудсыг дахин нээнэ үү.';
 
@@ -32,12 +36,17 @@ const STEPS_REF = [
 ];
 
 const sheet = (cls, ...children) => h('section', { class: `pr-sheet ${cls}` }, ...children);
+/** Top row of every printed cell: logo + school + event name (+ a short tag on the right). */
+const brand = (tag) => h('div', { class: 'pr-brand' },
+  h('img', { class: 'pr-logo', src: LOGO, alt: '', width: 192, height: 192 }),
+  h('div', { class: 'pr-brand-text' }, h('b', {}, SCHOOL), h('span', {}, TITLE)),
+  tag ? h('span', { class: 'pr-brand-tag' }, tag) : null);
 const deadlineText = () => shortDateTime(vault.meta().regClosesAt || DEFAULT_REG_CLOSES);
 
 function classCard(qr, it, deadline) {
   const adult = it.is_teachers;
   return h('article', { class: 'pr-cell pr-card' },
-    h('div', { class: 'pr-top' }, h('span', {}, TITLE), h('span', {}, 'Багийн бүртгэл')),
+    brand('Багийн бүртгэл'),
     h('div', { class: `pr-card-name ${[...it.name].length > 6 ? 'long' : ''}`.trim() }, it.name),
     h('div', { class: 'pr-card-body' },
       qrNode(qr, classLink(it.token), 'pr-qr-card'),
@@ -48,18 +57,19 @@ function classCard(qr, it, deadline) {
 
 function pinSlip(it, deadline) {
   const t = it.is_teachers; // «Багш нарын баг»: the PIN goes to the team captain
+  // grid: team name + warning on the left, PIN on the right (one row even for «Багш нарын баг»)
   return h('article', { class: 'pr-cell pr-pin' },
-    h('div', { class: 'pr-top' }, h('span', {}, TITLE), h('span', {}, t ? 'Зөвхөн багийн ахлагчид' : 'Зөвхөн багшид')),
-    h('div', { class: 'pr-pin-line' },
-      h('b', { class: 'pr-pin-team' }, it.name), h('span', { class: 'pr-dot' }, '·'),
-      h('span', {}, t ? 'Ахлагчийн PIN:' : 'Багшийн PIN:'), h('b', { class: 'pr-pin-code' }, it.pin)),
+    brand(t ? 'Зөвхөн багийн ахлагчид' : 'Зөвхөн багшид'),
+    h('b', { class: `pr-pin-team ${[...it.name].length > 6 ? 'long' : ''}`.trim() }, it.name),
+    h('div', { class: 'pr-pin-codebox' },
+      h('span', { class: 'pr-pin-label' }, t ? 'Ахлагчийн PIN:' : 'Багшийн PIN:'), h('b', { class: 'pr-pin-code' }, it.pin)),
     h('div', { class: 'pr-pin-warn' }, t ? 'Бусдад бүү өгнө үү.' : 'Сурагчдад бүү өгнө үү.'),
     h('p', { class: 'pr-pin-note' }, `${t ? 'Багийн мэдээллийг бөглөсний дараа ахлагч' : 'Сурагчид мэдээллээ бөглөсний дараа'} энэ PIN-ээр батална уу. Хугацаа: ${deadline}. 5 удаа буруу оруулбал 15 минут түгжигдэнэ.`));
 }
 
 function refSlip(qr, r) {
   return h('article', { class: 'pr-cell pr-ref' },
-    h('div', { class: 'pr-top' }, h('span', {}, TITLE), h('span', {}, 'Шүүгчийн эрх')),
+    brand('Шүүгчийн эрх'),
     h('div', { class: 'pr-ref-label' }, r.label),
     h('div', { class: 'pr-ref-station' }, r.station === 'A' ? 'А станцын тоглолтууд' : r.station === 'B' ? 'Б станцын тоглолтууд' : 'Бүх тоглолт (ерөнхий шүүгч)'),
     qrNode(qr, refLink(r.token), 'pr-qr-ref'),
@@ -98,17 +108,21 @@ function buildRef(qr) {
 }
 
 function buildSite(qr) {
+  const [t1, t2 = ''] = EVENT_NAME.split(' – ');   // «Сургуулийн аварга» / «CS2 2026»
   return {
     sheets: [sheet('pr-site',
-      h('div', { class: 'pr-site-school' }, SCHOOL),
-      h('h1', { class: 'pr-site-title' }, 'Ангийн аварга', h('br'), h('span', {}, 'CS2 2026')),
+      h('div', { class: 'pr-site-brand' },
+        h('img', { class: 'pr-site-logo', src: LOGO_BIG, alt: '', width: 512, height: 512 }),
+        h('div', { class: 'pr-site-school' }, SCHOOL)),
+      h('h1', { class: 'pr-site-title' }, t1, h('br'), h('span', {}, t2)),
       h('p', { class: 'pr-site-sub' }, '8–12-р ангийн Counter-Strike 2 тэмцээн'),
       h('p', { class: 'pr-site-dates' }, '10.24 (Бя) хэсгийн шат · 10.25 (Ня) хасагдах шат'),
       qrNode(qr, SITE_URL, 'pr-qr-site'),
       h('p', { class: 'pr-site-cta' }, 'Утасныхаа камераар уншуулаарай'),
       h('p', { class: 'pr-site-url' }, siteLabel()),
       h('ul', { class: 'pr-site-list' }, ['Хуваарь, хэсгийн байр, оноо', 'Шууд дамжуулалтын холбоос', 'Удирдамж, асуулт хариулт'].map((t) => h('li', {}, t))),
-      h('p', { class: 'pr-site-foot' }, `Шууд дамжуулалт: Facebook «${FB_PAGE}» · Оролцоо үнэ төлбөргүй · Valve-ийн албан ёсны тэмцээн биш`))],
+      h('p', { class: 'pr-site-prize' }, `Шагналын сан ${mnt(PRIZES.fund)} · «${CUP_NAME}» шилжин явах цом · MVP ${mnt(PRIZES.mvp_cash)} + жижиг цом`),
+      h('p', { class: 'pr-site-foot' }, `Шууд дамжуулалт: Facebook «${FB_PAGE}» · Хураамж ${mnt(FEE.team)}\u00A0/\u00A0анги · Skin, item, бооцоо байхгүй · Valve-ийн албан ёсны тэмцээн биш`))],
   };
 }
 
@@ -117,7 +131,7 @@ function buildSecret() {
   if (!d) return { empty: 'Нууц тоо энэ цонхны санах ойд алга. Админ → «Сугалаа» хэсэгт үүсгээд энэ хуудсыг дахин нээнэ үү.' };
   return {
     sheets: [sheet('pr-secret',
-      h('div', { class: 'pr-top' }, h('span', {}, TITLE), h('span', {}, 'Нууц — битүүмжилнэ')),
+      brand('Нууц — битүүмжилнэ'),
       h('h1', {}, 'Сугалааны нууц тоо'),
       h('p', {}, 'Сугалаа: 10.22 (Пү) 16:00, техникийн зөвлөгөөн'),
       h('div', { class: 'pr-secret-box' }, secretGroups(d.secret, 8)),
@@ -137,9 +151,21 @@ const KINDS = {
   secret: { title: 'Сугалааны нууц тоо', back: ['#/admin?tab=draw', 'Админ руу буцах'], build: buildSecret },
 };
 
+/** Waits (max 3 s) until the logos are loaded, so they are never missing on paper. */
+function imagesReady() {
+  const imgs = Array.from(document.querySelectorAll('.pr-doc img')).filter((i) => !i.complete);
+  if (!imgs.length) return Promise.resolve();
+  const each = imgs.map((i) => new Promise((r) => { i.addEventListener('load', r, { once: true }); i.addEventListener('error', r, { once: true }); }));
+  return Promise.race([Promise.all(each), new Promise((r) => { setTimeout(r, 3000); })]);
+}
+
 function toolbar(key, def, built) {
   const printBtn = h('button', { type: 'button', class: 'btn', disabled: !!built.empty }, 'Хэвлэх');
-  printBtn.addEventListener('click', () => { if (key === 'secret') vault.markDrawSaved(); window.print(); });
+  printBtn.addEventListener('click', async () => {
+    if (key === 'secret') vault.markDrawSaved();
+    await imagesReady();
+    window.print();
+  });
   return h('div', { class: 'pr-toolbar no-print' },
     h('div', { class: 'row' },
       h('a', { class: 'btn secondary', href: def.back[0] }, `← ${def.back[1]}`),

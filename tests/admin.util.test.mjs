@@ -88,7 +88,7 @@ test('links, PIN message and local time conversion', () => {
   assert.match(pinMessage({ name: 'Багш нарын баг', pin: '4821', is_teachers: true }), /Ахлагчийн PIN/);
   assert.equal(localInputToIso('2026-10-24T12:00'), '2026-10-24T12:00:00+08:00');
   assert.equal(isoToLocalInput('2026-10-24T04:00:00Z'), '2026-10-24T12:00');
-  assert.equal(shortDateTime('2026-10-16T17:00:00+08:00'), '10.16 (Ба) 17:00');
+  assert.equal(shortDateTime('2026-10-23T17:00:00+08:00'), '10.23 (Ба) 17:00');
 });
 
 // ---- integration alignment with the SQL admin API (supabase/migrations/08_admin_api.sql) ----

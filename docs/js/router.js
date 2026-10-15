@@ -1,5 +1,7 @@
 // Hash router: #/, #/rules, #/k/<token>, #/ref/<token>, #/admin, #/print/<kind> ...
+// «Сургуулийн аварга – CS2 2026». Хуудас бүрийн өмнө document.title-ийг тэмцээний нэр болгоно (хуудас өөрөө сольж болно).
 import { BUILD } from './config.js';
+import { EVENT_NAME } from './event.js';
 
 const PAGES = {
   '': 'home', rules: 'rules', schedule: 'schedule', groups: 'groups', bracket: 'bracket', faq: 'faq',
@@ -25,6 +27,7 @@ async function render() {
   if (typeof cleanup === 'function') { try { cleanup(); } catch { /* ignore */ } }
   cleanup = null;
   document.body.dataset.page = page;
+  document.title = EVENT_NAME;
   document.body.classList.toggle('fullscreen', FULLSCREEN.has(page) || params.query.overlay === '1');
   for (const a of document.querySelectorAll('[data-nav]')) a.classList.toggle('active', a.dataset.nav === (key || 'home'));
   root.textContent = '';

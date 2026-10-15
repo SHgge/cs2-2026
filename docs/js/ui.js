@@ -1,5 +1,5 @@
-// UI туслахууд. Өгөгдлийг ЗӨВХӨН textContent-ээр гаргана (XSS-ээс хамгаална).
-import { TZ } from './config.js';
+// «Сургуулийн аварга – CS2 2026» — UI туслахууд. Өгөгдлийг ЗӨВХӨН textContent-ээр гаргана (XSS-ээс хамгаална).
+import { TZ, CONTACT_PHONES } from './config.js';
 
 /** h('div', {class:'x', onclick:fn, dataset:{a:1}}, 'text', child, [children]) */
 export function h(tag, attrs = {}, ...children) {
@@ -54,6 +54,21 @@ export function fmtCountdown(ms) {
   const mm = String(Math.floor((s % 3600) / 60)).padStart(2, '0');
   const ss = String(s % 60).padStart(2, '0');
   return d > 0 ? `${d} хоног ${hh}:${mm}:${ss}` : `${hh}:${mm}:${ss}`;
+}
+
+/** 120000 → '120 000 ₮' (зай нь тасрахгүй U+00A0). */
+export function mnt(n) {
+  return `${String(Math.round(Number(n) || 0)).replace(/\B(?=(\d{3})+(?!\d))/g, '\u00A0')}\u00A0₮`;
+}
+
+/** Зохион байгуулагчийн утас: дугаар бүр тусдаа tel: холбоос, «, »-ээр зааглана. */
+export function phoneLinks(cls = 'tel') {
+  const nums = (CONTACT_PHONES || []).map((p) => String(p).trim()).filter(Boolean);
+  return h('span', { class: cls }, nums.map((p, i) => {
+    const tel = p.replace(/[^\d+]/g, '');
+    const a = tel.replace(/\D/g, '').length >= 6 ? h('a', { href: `tel:${tel}` }, p) : p;
+    return i ? [', ', a] : a;
+  }));
 }
 
 let toastBox = null;

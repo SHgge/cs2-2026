@@ -3,10 +3,10 @@
 import { h, toast, fmtTime, fmtDate, fmtDateTime, teamName } from '../ui.js';
 import { btn, section, chip, confirmDialog, matchStatusChip, MATCH_STATUS } from './core.js';
 import {
-  forfeitScore, isKnockout, isOvertime, parseScore, isoToLocalInput, localInputToIso, SEAT_CYR, DRAW_GROUPS,
+  forfeitScore, isKnockout, isOvertime, parseScore, isoToLocalInput, localInputToIso, SEAT_CYR, DRAW_GROUPS, mntText,
 } from './util.js';
 import { resolveMatches, groupStandings, validScore, finalRanking, srcLabel } from '../logic.js';
-import { MATCHES } from '../event.js';
+import { MATCHES, PRIZES } from '../event.js';
 
 const GROUP_STATUS = {
   pending: ['Эхлээгүй', ''], provisional: ['Урьдчилсан', 'gold'], needs_lot: ['Сугалаа хэрэгтэй', 'err'], complete: ['Дууссан', 'ok'],
@@ -167,8 +167,8 @@ function standingsCard(ctx, g) {
 
   box.appendChild(h('div', { class: 'row adm-mt' },
     dec.approved
-      ? btn('Батламжийг цуцлах', async () => {
-        const ok = await confirmDialog({ title: `${SEAT_CYR[g]} хэсгийн батламжийг цуцлах уу?`, ok: 'Цуцлах', danger: true });
+      ? btn('Батлалтыг цуцлах', async () => {
+        const ok = await confirmDialog({ title: `${SEAT_CYR[g]} хэсгийн дүнгийн батлалтыг цуцлах уу?`, ok: 'Цуцлах', danger: true });
         if (ok) await ctx.act('group_approve', { grp: g, approved: false }, 'Цуцаллаа');
       }, 'secondary small-btn')
       : btn('Хэсгийн дүнг батлах', async () => {
@@ -230,10 +230,11 @@ function rankingBox(ctx) {
   const fr = safe(() => finalRanking(st), null);
   if (!fr || !Array.isArray(fr.classPlaces) || !fr.classPlaces.some((x) => x != null)) return null;
   const award = fr.teachersAward === 'honor' ? 'Хүндэт байрын өргөмжлөл' : fr.teachersAward === 'special' ? 'Тусгай өргөмжлөл' : null;
+  const prize = (i) => (PRIZES.place[i] ? ` — ${mntText(PRIZES.place[i])} (тоглогч бүрт ${mntText(PRIZES.per_player[i])})` : '');
   return section('Эцсийн байр (ангиуд)',
-    h('ol', { class: 'adm-podium' }, fr.classPlaces.map((id, i) => h('li', {}, h('b', {}, `${i + 1}-р байр: `), id == null ? '—' : teamName(st, id)))),
+    h('ol', { class: 'adm-podium' }, fr.classPlaces.map((id, i) => h('li', {}, h('b', {}, `${i + 1}-р байр: `), id == null ? '—' : teamName(st, id), id == null ? null : prize(i)))),
     award ? h('p', { class: 'small' }, `Багш нарын баг: ${award}.`) : null,
-    h('p', { class: 'muted small' }, 'Цом, медаль зөвхөн ангийн багт олгоно.'));
+    h('p', { class: 'muted small' }, `Цом, медаль, мөнгөн шагналыг зөвхөн ангийн багт олгоно; мөнгийг хаалтын үеэр баг хүлээн авч, ахлагч шагналын бүртгэлд гарын үсэг зурна. MVP (жижиг цом + ${mntText(PRIZES.mvp_cash)}) — ангийн багийн тоглогчдоос ерөнхий шүүгч, хороо бүх тоглолтын статистикаар (MatchZy) шалгаруулна.`));
 }
 
 export function render(panel, ctx) {
