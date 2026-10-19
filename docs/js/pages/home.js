@@ -103,23 +103,24 @@ function keyDates(s, now) {
     })));
 }
 
-/** Хураамж ба шагналын сан (SPEC v5 §2a, §5) — тоо event.js-ээс. */
+/** Хураамж ба шагналын сан (SPEC v7 §0c) — тоо event.js-ээс. Бүх 12 баг төлнө; сан 800 000 ₮-д MVP орсон. */
 function prizeCard(s) {
   const titles = ['Аварга', '2-р байр', '3-р байр'];
   return h('section', { class: 'card hm-prize', 'aria-labelledby': 'hm-prize-h' },
     h('h2', { id: 'hm-prize-h' }, 'Хураамж ба шагнал'),
     h('div', { class: 'hm-fee' },
       h('span', { class: 'hm-fee-l' }, 'Багийн хураамж'),
-      h('b', { class: 'hm-fee-v' }, mnt(FEE.team), h('small', {}, ' / анги')),
+      h('b', { class: 'hm-fee-v' }, mnt(FEE.team), h('small', {}, ' / баг')),
       h('span', { class: 'hm-fee-d' }, `${dt(s.fee)} хүртэл зохион байгуулагч ${STAFF.organiser}д төлж, баримт авна`)),
-    h('p', { class: 'hm-fund' }, 'Шагналын сан ', h('b', {}, mnt(PRIZES.fund))),
+    h('p', { class: 'hm-fund' }, 'Шагналын сан ', h('b', {}, mnt(PRIZES.fund)), h('small', {}, ' (MVP орсон)')),
     h('ol', { class: 'hm-places' }, PRIZES.place.map((v, i) => h('li', { class: `hm-place p${i + 1}` },
       h('span', { class: 'hm-place-n' }, titles[i]),
       h('b', { class: 'hm-place-v' }, mnt(v)),
       h('span', { class: 'hm-place-pp' }, `тоглогч бүрд ${mnt(PRIZES.per_player[i])}`)))),
     h('p', { class: 'hm-mvp' }, h('b', {}, 'MVP'), ` — тэмцээний шилдэг тоглогч: жижиг цом + ${mnt(PRIZES.mvp_cash)}`),
     h('p', { class: 'small muted hm-prize-note' },
-      'Багш нарын баг хураамж төлөхгүй, мөнгөн шагнал авахгүй. Бүх хураамж шагналд зарцуулагдана. ',
+      `Бүх ${FEE.teams} баг хураамж төлнө, Багш нарын баг ч мөн. Цом, медаль, мөнгөн шагналыг зөвхөн ангийн баг авна. `
+      + `Бүх хураамж (${mnt(FEE.total)}) шагналд зарцуулагдана. `,
       h('a', { href: '#/rules' }, 'Дэлгэрэнгүй →')));
 }
 

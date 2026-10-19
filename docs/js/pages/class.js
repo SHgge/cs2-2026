@@ -638,7 +638,7 @@ function createClassPage(root, params) {
     el.draft = h('div', { class: 'card warn k-draftnote', role: 'status', hidden: true });
     el.form = h('section', { class: 'k-form', 'aria-labelledby': 'k-form-h' });
     el.confirm = h('section', { class: 'card k-confirm', 'aria-labelledby': 'k-confirm-h' });
-    add(root, el.hero, el.matches, el.window, el.status, S.isT ? null : feeCard(), el.draft, el.form, el.confirm, toolsCard(), tipsSection());
+    add(root, el.hero, el.matches, el.window, el.status, feeCard(), el.draft, el.form, el.confirm, toolsCard(), tipsSection());
     renderStatus();
     renderWindow();
     renderDraftNote();
@@ -775,19 +775,25 @@ function createClassPage(root, params) {
   }
 
   /**
-   * Багийн хураамж, шагналын сан — зөвхөн ангийн багт (SPEC v5 §2a, §5). Багш нарын баг хураамж төлөхгүй.
+   * Багийн хураамж, шагналын сан (SPEC v7 §0c): бүх 12 баг, Багш нарын баг ч хураамж төлнө; мөнгөн шагнал зөвхөн ангийн багт.
    * SPEC v6 §0b.3: хураамжийг зохион байгуулагч баримттайгаар хүлээн авна; анги удирдсан багш мөнгө хураахгүй.
    */
   function feeCard() {
     const [p1, p2, p3] = PRIZES.place.map(mnt);
+    const fund = `Шагналын сан ${mnt(PRIZES.fund)} (MVP орсон): 1-р байр ${p1} · 2-р байр ${p2} · 3-р байр ${p3} · MVP ${mnt(PRIZES.mvp_cash)} + жижиг цом.`;
     return h('section', { class: 'card k-fee', 'aria-labelledby': 'k-fee-h' },
       h('h2', { id: 'k-fee-h', class: 'k-fee-h' }, 'Хураамж, шагнал'),
-      h('p', { class: 'k-fee-main' }, h('b', {}, `Багийн хураамж ${mnt(FEE.team)}`),
-        ` — ахлагч эсвэл ангийн төлөөлөгч ${dt(DATES.fee_due_at)} хүртэл зохион байгуулагч ${STAFF.organiser}д төлж, баримт авна. `
-        + 'Бэлнээр эсвэл сургуулийн дансанд шилжүүлж болно; анги удирдсан багш мөнгө хураахгүй. ',
-        h('b', {}, 'Хураамж төлөөгүй баг тоглохгүй.')),
-      h('p', { class: 'k-fee-prize small' },
-        `Шагналын сан ${mnt(PRIZES.fund)}: 1-р байр ${p1} · 2-р байр ${p2} · 3-р байр ${p3} · MVP ${mnt(PRIZES.mvp_cash)} + жижиг цом.`));
+      S.isT
+        ? h('p', { class: 'k-fee-main' }, h('b', {}, `Багийн хураамж ${mnt(FEE.team)}`),
+          ` — Багш нарын баг ч хураамж төлнө. Багийн ахлагч ${dt(DATES.fee_due_at)} хүртэл зохион байгуулагч ${STAFF.organiser}д `
+          + 'бэлнээр эсвэл сургуулийн дансанд шилжүүлж төлөөд, баримт авна. ',
+          h('b', {}, 'Хураамж төлөөгүй баг тоглохгүй.'))
+        : h('p', { class: 'k-fee-main' }, h('b', {}, `Багийн хураамж ${mnt(FEE.team)}`),
+          ` — ахлагч эсвэл ангийн төлөөлөгч ${dt(DATES.fee_due_at)} хүртэл зохион байгуулагч ${STAFF.organiser}д төлж, баримт авна. `
+          + 'Бэлнээр эсвэл сургуулийн дансанд шилжүүлж болно; анги удирдсан багш мөнгө хураахгүй. ',
+          h('b', {}, 'Хураамж төлөөгүй баг тоглохгүй.')),
+      h('p', { class: 'k-fee-prize small' }, fund,
+        S.isT ? ' Цом, медаль, мөнгөн шагналыг зөвхөн ангийн баг авна.' : ''));
   }
 
   function renderWindow() {
@@ -1553,12 +1559,12 @@ function createClassPage(root, params) {
           h('p', {}, `Багийн менежер (анги удирдсан багш): ${dots}   Утас: ${'.'.repeat(24)}`),
           h('p', {}, `Гарын үсэг: ${dots}   Огноо: 2026.10.____`)),
       h('p', { class: 'kp-fee' }, isT
-        ? 'Хураамж: хамаарахгүй — Багш нарын баг тэмцээний хураамж төлөхгүй (мөнгөн шагналд оролцохгүй).'
+        ? `Хураамж ${mnt(FEE.team)}: багийн ахлагч ${dt(DATES.fee_due_at)}-аас өмнө зохион байгуулагч ${STAFF.organiser}д бэлнээр эсвэл сургуулийн дансаар төлж, баримт авна (мөнгөн шагналд оролцохгүй). Баримтын № ${'.'.repeat(20)}   Огноо: 2026.10.____`
         : `Хураамж ${mnt(FEE.team)}: ахлагч эсвэл ангийн төлөөлөгч ${dt(DATES.fee_due_at)}-аас өмнө зохион байгуулагч ${STAFF.organiser}д бэлнээр эсвэл сургуулийн дансаар төлж, баримт авна. Баримтын № ${'.'.repeat(20)}   Огноо: 2026.10.____`),
       // SPEC v6 §0b.2–3: хүлээн авагч — зохион байгуулагч (мэдээллийн технологийн багш), сургалтын менежерийн ерөнхий удирдлага дор.
       h('p', { class: 'kp-deadline' }, `Хүлээлгэн өгөх хугацаа: ${dt(consentDeadline())} — зохион байгуулагч, мэдээллийн технологийн багш ${STAFF.organiser}д (утас ${CONTACT_PHONE}).`),
       h('div', { class: 'kp-received' }, `ХҮЛЭЭН АВСАН: зохион байгуулагч ........................ /${STAFF.organiser}/   Огноо: 2026.10.____   Цаг: ____:____`
-        + (isT ? '' : '   Хураамж: ☐ баримттай төлсөн')));
+        + '   Хураамж: ☐ баримттай төлсөн'));
   }
 
   /* ---------- tips (static content) ---------- */

@@ -124,9 +124,9 @@ function buildSite(qr) {
       h('p', { class: 'pr-site-cta' }, 'Утасныхаа камераар уншуулаарай'),
       h('p', { class: 'pr-site-url' }, siteLabel()),
       h('ul', { class: 'pr-site-list' }, ['Хуваарь, хэсгийн байр, оноо', 'Шууд дамжуулалтын холбоос', 'Удирдамж, асуулт хариулт'].map((t) => h('li', {}, t))),
-      h('p', { class: 'pr-site-prize' }, `Шагналын сан ${mnt(PRIZES.fund)} · «${CUP_NAME}» шилжин явах цом · MVP ${mnt(PRIZES.mvp_cash)} + жижиг цом`),
+      h('p', { class: 'pr-site-prize' }, `Шагналын сан ${mnt(PRIZES.fund)} (MVP ${mnt(PRIZES.mvp_cash)} орсон) · «${CUP_NAME}» шилжин явах цом`),
       h('p', { class: 'pr-site-contact' }, CONTACT),
-      h('p', { class: 'pr-site-foot' }, `Шууд дамжуулалт: Facebook «${FB_PAGE}» · Хураамж ${mnt(FEE.team)}\u00A0/\u00A0анги · Skin, item, бооцоо байхгүй · Valve-ийн албан ёсны тэмцээн биш`))],
+      h('p', { class: 'pr-site-foot' }, `Шууд дамжуулалт: Facebook «${FB_PAGE}» · Хураамж ${mnt(FEE.team)}\u00A0/\u00A0баг · Skin, item, бооцоо байхгүй · Valve-ийн албан ёсны тэмцээн биш`))],
   };
 }
 

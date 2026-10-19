@@ -504,11 +504,13 @@ export default async function render(root, params = {}) {
         `Онлайн бүртгэл ${dayTime(s.reg)} хүртэл. Ангиа бүртгүүлээрэй!`,
         `Хураамжаа зохион байгуулагч ${STAFF.organiser}д, зөвшөөрлөө багшдаа ${dayTime(DATES.fee_due_at)} хүртэл өгөөрэй`,
         'Охид, хөвгүүд ангийнхаа нэг багт тоглоно',
-        `Шагналын сан ${money(PRIZES.fund)} + MVP ${money(PRIZES.mvp_cash)}`,
+        // SPEC v7: MVP is inside the fund — show the parts, never «fund + MVP».
+        `Шагналын сан ${money(PRIZES.fund)} = ${PRIZES.place.map((v) => fmtNum(v)).join(' + ')} + MVP${NBSP}${fmtNum(PRIZES.mvp_cash)}`,
         `Steam QR дадлага 10.19–23. Утсандаа Steam${NBSP}Mobile апп суулгаарай`,
         gear,
         `Тэмцээнийг ${PLACES.hall}ын LED дэлгэцээр, «${FB_PAGE}» Facebook хуудсаар шууд үзнэ`,
         'Skin, item, бооцоо байхгүй',
+        `Хураамж ${money(FEE.team)} — бүх ${FEE.teams} баг, Багш нарын баг ч төлнө`,
       ];
       case 'closed': return [`Тоглогчид 10.24 (Бя) 08:30-д ирж бүртгүүлнэ. Нээлт 09:00-д ${PLACES.hall}д`, come, gear, fb,
         `Үзэгчид ${PLACES.hall}д LED дэлгэцээр үзнэ. ${PLACES.lab}-д орохгүй`];
@@ -550,10 +552,13 @@ export default async function render(root, params = {}) {
           : h('div', { class: 'race-sum cta' }, h('b', {}, 'Аль анги түрүүлж бүртгүүлэх вэ?')));
     },
 
+    // SPEC v7 §0c: сан 800 000 ₮ = 1–3-р байр + MVP (MVP орсон) — нийлбэрийг томоор харуулна.
     prize: () => slideEl('prize',
       h('div', { class: 'prize-top' },
         h('div', { class: 'prize-fund-w' }, kick('Шагналын сан'),
-          h('div', { class: 'prize-fund' }, num(PRIZES.fund), h('span', { class: 'cur' }, '₮'))),
+          h('div', { class: 'prize-fund' }, num(PRIZES.fund), h('span', { class: 'cur' }, '₮')),
+          h('div', { class: 'prize-sum' }, [...PRIZES.place.map((v) => fmtNum(v)), `MVP${NBSP}${fmtNum(PRIZES.mvp_cash)}`]
+            .flatMap((t, i) => (i ? [h('i', {}, '+'), h('b', {}, t)] : [h('b', {}, t)])))),
         h('div', { class: 'prize-mvp' }, icon('star'),
           h('div', {}, h('b', {}, 'MVP'), h('span', {}, 'жижиг цом + ', money(PRIZES.mvp_cash))))),
       h('div', { class: 'podium' }, placeCard(2), placeCard(1), placeCard(3)),
@@ -568,17 +573,17 @@ export default async function render(root, params = {}) {
         `${dayTime(DATES.fee_due_at)} хүртэл: эцэг эхийн зөвшөөрлөө багшдаа өгч, хураамжаа зохион байгуулагч ${STAFF.organiser}д төлөөрэй.`,
       ].map((t, i) => h('div', { class: 'join-step' }, h('b', { class: 'join-n' }, pad2(i + 1)), h('span', {}, t))))),
 
-    // SPEC v6 §0b.3: хураамжийг зохион байгуулагч баримттайгаар хүлээн авна.
+    // SPEC v6 §0b.3: хураамжийг зохион байгуулагч баримттайгаар хүлээн авна. SPEC v7: бүх 12 баг төлнө.
     fee: () => slideEl('fee',
       kick('Тэмцээний хураамж'),
-      h('div', { class: 'fee-big' }, h('b', {}, money(FEE.team)), h('span', {}, '/ анги')),
+      h('div', { class: 'fee-big' }, h('b', {}, money(FEE.team)), h('span', {}, '/ баг')),
       h('div', { class: 'fee-per' }, `Тоглогч бүрд ойролцоогоор ${money(FEE.per_player)}`, h('i', {}, '·'), h('b', {}, 'Төлөөгүй баг тоглохгүй')),
       h('div', { class: 'fee-cards' },
         h('div', { class: 'fcard' }, icon('doc'),
           h('p', {}, `Хураамжаа зохион байгуулагч ${STAFF.organiser}д төлж, баримт аваарай.`),
           h('div', { class: 'fee-due' }, icon('clock'), `${dayTime(DATES.fee_due_at)} хүртэл`)),
         h('div', { class: 'fcard' }, icon('trophy'),
-          h('p', {}, 'Бүх хураамж шагналд зарцуулагдана. Багш нарын баг хураамж төлөхгүй.')))),
+          h('p', {}, `Бүх ${FEE.teams} баг төлнө, Багш нарын баг ч мөн. Бүх хураамж шагналд зарцуулагдана.`)))),
 
     req: () => slideEl('req',
       title('Бэлэн үү?'),

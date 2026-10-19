@@ -3,7 +3,7 @@
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import * as L from '../docs/js/logic.js';
 import {
   GROUPS, GROUP_LABEL, GROUP_COLOR, STATION_LABEL, STAGE_LABEL, TEAMS, DRAW_ORDER, MATCHES, DAY_INFO,
@@ -110,17 +110,27 @@ describe('event.js', () => {
     }
   });
 
-  test('SPEC v5: team fee 11 × 120 000 = prize fund + MVP cash + MVP cup (balance 0)', () => {
+  test('SPEC v7: all 12 teams pay — 12 × 120 000 = 1 440 000 = cash 800 000 + award items 570 000 + reserve 70 000', () => {
     assert.equal(FEE.team, 120000);
-    assert.equal(FEE.teams, TEAMS.filter((t) => !t.is_teachers).length);
+    assert.equal(FEE.teams, TEAMS.length, 'the teachers\' team pays too');
+    assert.equal(FEE.teams, 12);
     assert.equal(FEE.team * FEE.teams, FEE.total);
-    assert.equal(FEE.total, 1320000);
-    assert.deepEqual(PRIZES.place, [600000, 360000, 240000]);
-    assert.equal(PRIZES.place.reduce((a, b) => a + b, 0), PRIZES.fund);
-    assert.equal(PRIZES.fund, 1200000);
+    assert.equal(FEE.total, 1440000);
+    assert.equal(FEE.per_player * 6, FEE.team);
+    assert.deepEqual(PRIZES.place, [360000, 240000, 120000]);
+    assert.equal(PRIZES.place.reduce((a, b) => a + b, 0), PRIZES.places_total);
+    assert.equal(PRIZES.places_total, 720000);
+    assert.equal(PRIZES.mvp_cash, 80000);
+    assert.equal(PRIZES.fund, 800000, 'cash fund, MVP included');
+    assert.equal(PRIZES.places_total + PRIZES.mvp_cash, PRIZES.fund, 'places + MVP = fund (no double count)');
     assert.deepEqual(PRIZES.place.map((v) => v / 6), PRIZES.per_player);
-    assert.equal(PRIZES.fund + PRIZES.mvp_cash + PRIZES.mvp_cup, FEE.total);
-    for (const x of [DATES, FEE, PRIZES, PRIZES.place]) assert.ok(Object.isFrozen(x));
+    assert.deepEqual(PRIZES.per_player, [60000, 40000, 20000]);
+    assert.equal(PRIZES.items, 570000);
+    assert.equal(PRIZES.reserve, 70000);
+    assert.equal(PRIZES.fund + PRIZES.items + PRIZES.reserve, FEE.total, 'balance 0');
+    // award items (SPEC v7 §0c.3): cup 250 000 + plate 20 000 + medals 3 × 6 × 10 000 + өргөмжлөл 20 × 5 000 + MVP cup
+    assert.equal(250000 + 20000 + 3 * 6 * 10000 + 20 * 5000 + PRIZES.mvp_cup, PRIZES.items);
+    for (const x of [DATES, FEE, PRIZES, PRIZES.place, PRIZES.per_player]) assert.ok(Object.isFrozen(x));
   });
 
   test('DAY_INFO blocks and frozen exports', () => {
@@ -764,10 +774,37 @@ describe('SPEC v6: public pages — people and places', () => {
       ['placeholder', /\[(?:Захирлын овог нэр|Сургалтын менежерийн нэр|Мэдээлэл зүйн багшийн нэр|Нийгмийн ажилтны нэр|Нягтлан бодогчийн нэр|Лабын тоот|Танхимын нэр|Өрөөний тоот|Хот, дүүрэг|Утас|Овог нэр|И-мэйл)\]/u],
       ['removed v5 wording', /Ангийн\s+аварга|төлбөргүй|хураамжгүй|батламж|Шударга\s+тоглолт|Шилдэг\s+тайлбарлагч|Бэлэн\s+мөнгө|10\.16\s*\(Ба\)\s*17:00|10\.21\s*\(Лх\)\s*17:00/iu],
       ['old budget totals', /2(?:\s|&nbsp;)333(?:\s|&nbsp;)100|1(?:\s|&nbsp;)838(?:\s|&nbsp;)100|2(?:\s|&nbsp;)121(?:\s|&nbsp;)000/u],
+      // SPEC v7 §0c.5: old money — fund 1 200 000, 1st 600 000, fee total 1 320 000, «11 × 120 000», teachers' team exempt
+      ['v7: old prize / fee amounts', /1(?:\s|&nbsp;)200(?:\s|&nbsp;)000|1(?:\s|&nbsp;)320(?:\s|&nbsp;)000|600(?:\s|&nbsp;)000|11(?:\s|&nbsp;)*×/u],
+      ['v7: teachers\' team exempt from the fee', /хураамж(?:\s|&nbsp;)+төлөхгүй|хураамж:(?:\s|&nbsp;)+хамаарахгүй/iu],
+      ['v7: old MVP cash 100 000', /MVP[^.\n<]{0,40}100(?:\s|&nbsp;)000/u],
     ];
     for (const rel of PUBLIC) {
       const src = read(rel);
       for (const [label, re] of BAD) assert.doesNotMatch(src, re, `${rel}: ${label}`);
+    }
+  });
+
+  test('SPEC v7 money everywhere in docs/ (admin, class page, print, lobby screen too): no old amounts, no fee exemption', () => {
+    const files = [];
+    const walk = (rel) => {
+      for (const e of readdirSync(new URL(rel, DOCS), { withFileTypes: true })) {
+        const r = `${rel}${e.name}`;
+        if (e.isDirectory()) { if (e.name !== 'vendor' && e.name !== 'assets' && e.name !== 'fonts') walk(`${r}/`); }
+        else if (/\.(?:js|html|css)$/.test(e.name)) files.push(r);
+      }
+    };
+    walk('');
+    assert.ok(files.includes('js/pages/screen.js') && files.includes('js/admin/util.js') && files.includes('index.html'));
+    const MONEY = [
+      ['old fund / 1st place / fee total', /1(?:\s|&nbsp;|\\u00A0)200(?:\s|&nbsp;|\\u00A0)000|1(?:\s|&nbsp;|\\u00A0)320(?:\s|&nbsp;|\\u00A0)000|600(?:\s|&nbsp;|\\u00A0)000|\b1[23]00000\b|\b600000\b/u],
+      ['«11 × 120 000»', /11(?:\s|&nbsp;)*×/u],
+      ['teachers\' team exempt from the fee', /хураамж(?:\s|&nbsp;)+төлөхгүй|хураамж:(?:\s|&nbsp;)+хамаарахгүй/iu],
+      ['fund + MVP cash (MVP is inside the fund since v7)', /PRIZES\.fund\)?\s*\}?\s*\+\s*(?:MVP|\$?\{?\s*\w*\(?PRIZES\.mvp_cash)/u],
+    ];
+    for (const rel of files) {
+      const src = read(rel);
+      for (const [label, re] of MONEY) assert.doesNotMatch(src, re, `${rel}: ${label}`);
     }
   });
 

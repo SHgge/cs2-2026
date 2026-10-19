@@ -79,11 +79,11 @@ export const siteLabel = () => SITE_URL.replace(/^https?:\/\//, '').replace(/\/$
 export function mntText(n) { return `${String(Math.round(Number(n) || 0)).replace(/\B(?=(\d{3})+(?!\d))/g, '\u00A0')}\u00A0₮`; }
 
 /**
- * Team fee reminder for class teams (SPEC v5 §2a, v6 §0b.3): paid to the organiser against a receipt
- * (cash or transfer to the school account); homeroom teachers do not collect money. The teachers' team pays no fee.
+ * Team fee reminder (SPEC v7 §0c, v6 §0b.3): all 12 teams pay, the teachers' team too (its captain pays; no cash prize).
+ * Paid to the organiser against a receipt (cash or transfer to the school account); homeroom teachers do not collect money.
  */
-export const feeLine = () => `Багийн хураамж ${mntText(FEE.team)} — ахлагч эсвэл ангийн төлөөлөгч ${shortDateTime(DATES.fee_due_at)} хүртэл `
-  + `зохион байгуулагч ${STAFF.organiser}д бэлнээр эсвэл сургуулийн дансаар төлж, баримт авна.`;
+export const feeLine = (teachers = false) => `Багийн хураамж ${mntText(FEE.team)} — ${teachers ? 'багийн ахлагч' : 'ахлагч эсвэл ангийн төлөөлөгч'} `
+  + `${shortDateTime(DATES.fee_due_at)} хүртэл зохион байгуулагч ${STAFF.organiser}д бэлнээр эсвэл сургуулийн дансаар төлж, баримт авна.`;
 
 /** Own-gear line (SPEC v6 §0b.6), voluntary: class teams label gear with name + class, the teachers' team with the name. */
 export const gearLine = (teachers = false) => 'Өөрийн хулгана, гар, чихэвч, хулганы дэвсгэрээ авчирч болно (заавал биш): '
@@ -93,7 +93,7 @@ export const gearLine = (teachers = false) => 'Өөрийн хулгана, га
 export function classLinkMessage(item, deadline) {
   if (item.is_teachers) {
     return `«${EVENT_NAME}» — Багш нарын багийн бүртгэл: ${classLink(item.token)}\n`
-      + `Хугацаа: ${deadline}. Холбоосыг зөвхөн багийн гишүүдэд хуваалцана уу.\n${gearLine(true)}`;
+      + `Хугацаа: ${deadline}. Холбоосыг зөвхөн багийн гишүүдэд хуваалцана уу.\n${feeLine(true)}\n${gearLine(true)}`;
   }
   return `«${EVENT_NAME}» — ${item.name} багийн бүртгэл: ${classLink(item.token)}\n`
     + `Хугацаа: ${deadline}. Холбоосыг зөвхөн ангийн чатад хуваалцаарай.\n${feeLine()}\n${gearLine()}`;

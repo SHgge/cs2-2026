@@ -694,6 +694,9 @@ const FORBIDDEN = [
   ['v6: «мэдээлэл зүйн багш»', words('мэдээлэл зүйн багш')],
   ['v6: waiting room «хүлээлгийн өрөө»', words('хүлээлгийн өрөө')],
   ['v6: projector', /проектор|projector/iu],
+  // SPEC v7 §0c.5: all 12 teams pay (the teachers' team too); old fund / place / fee amounts are gone
+  ['v7: teachers\' team exempt from the fee', /хураамж\s+төлөхгүй/iu],
+  ['v7: old money amounts', /1\s200\s000|1\s320\s000|600\s000|11\s*×\s*120/u],
   ['unfilled placeholder', /\[\[?(?:Захирлын овог нэр|Сургалтын менежерийн нэр|Мэдээлэл зүйн багшийн нэр|Нийгмийн ажилтны нэр|Нягтлан бодогчийн нэр|Лабын тоот|Танхимын нэр|Өрөөний тоот|Хот, дүүрэг)\]\]?/u],
   // weapon-free HUD (plan §4): no crosshair / reticle, no weapon names
   ['crosshair / reticle', /cross[\s_-]?hairs?|reticles?/iu],

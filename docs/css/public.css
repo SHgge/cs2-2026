@@ -252,6 +252,7 @@ tr.gp-q td { background: var(--g-l); }
 .hm-fee-d { grid-column: 1 / -1; color: var(--muted); font-size: .85rem; }
 .hm-fund { margin: 10px 0 8px; font-weight: 700; color: var(--navy); }
 .hm-fund b { color: var(--gold-ink); font-size: 1.15rem; white-space: nowrap; }
+.hm-fund small { font-size: .85rem; font-weight: 600; color: var(--muted); }
 .hm-places { list-style: none; padding: 0; margin: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
 .hm-place {
   display: flex; flex-direction: column; align-items: center; text-align: center; padding: 8px 4px; border-radius: 10px;

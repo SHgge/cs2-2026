@@ -38,16 +38,19 @@ export const DATES = deepFreeze({
 export const DRAW_AT = DATES.draw_at;
 
 /**
- * Team fee and prize fund in ₮ (SPEC v5 §2a, §5, §10B). The teachers' team pays no fee and gets no cash.
- * 11 × 120 000 = 1 320 000 = fund 1 200 000 (600 000 / 360 000 / 240 000) + MVP 100 000 + small MVP cup 20 000.
+ * Team fee and prize fund in ₮ (SPEC v7 §0c). All 12 teams pay; the teachers' team gets no cash.
+ * 12 × 120 000 = 1 440 000 = cash fund 800 000 (360 000 / 240 000 / 120 000 + MVP 80 000) + award items 570 000 + reserve 70 000.
  */
-export const FEE = deepFreeze({ team: 120000, per_player: 20000, teams: 11, total: 1320000 });
+export const FEE = deepFreeze({ team: 120000, per_player: 20000, teams: 12, total: 1440000 });   // v7: all 12 teams pay
 export const PRIZES = deepFreeze({
-  fund: 1200000,
-  place: [600000, 360000, 240000],        // 1st, 2nd, 3rd class team
-  per_player: [100000, 60000, 40000],     // shared equally among the 6 players
-  mvp_cash: 100000,
+  fund: 800000,                           // v7 «мөнгөн шагналын сан»: places 720 000 + MVP 80 000 (MVP INCLUDED)
+  places_total: 720000,
+  place: [360000, 240000, 120000],        // 1st, 2nd, 3rd class team (the teachers' team gets no cash)
+  per_player: [60000, 40000, 20000],      // shared equally among the 6 players
+  mvp_cash: 80000,
   mvp_cup: 20000,
+  items: 570000,                          // cup, plate, medals, өргөмжлөл, MVP cup — also paid from the fees
+  reserve: 70000,                         // fee reserve; 800 000 + 570 000 + 70 000 = 1 440 000
 });
 
 /** Group keys (Latin, internal). Show them with GROUP_LABEL. */

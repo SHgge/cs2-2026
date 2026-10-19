@@ -105,7 +105,7 @@ body[data-page="class"] .toasts .toast:nth-last-child(n+3), body[data-page="ref"
 .k-wmsg.info { border-color: #93C5FD; background: #EFF6FF; }
 .k-contact { margin-top: 6px; }
 
-/* team fee + prize fund (class teams only) */
+/* team fee (all 12 teams) + prize fund (cash to class teams only) */
 .k-fee { border-color: var(--gold); background: #FFFBEB; padding-top: 12px; padding-bottom: 12px; }
 .k-fee-h { font-size: 1rem; margin: 0 0 4px; color: var(--gold-ink); }
 .k-fee p { margin: 0; line-height: 1.4; }

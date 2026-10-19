@@ -208,6 +208,9 @@ html.scr-on body { background: #000; }
   text-shadow: 0 0 46px rgba(245, 165, 36, .38);
 }
 .prize-fund .cur, .pcard-amt .cur { margin-left: .2em; }
+.prize-sum { display: flex; align-items: baseline; gap: 12px; margin-top: 6px; font-size: 34px; line-height: 1.1; color: var(--muted); white-space: nowrap; }
+.prize-sum b { color: var(--text); font-weight: 600; }
+.prize-sum i { font-style: normal; color: var(--amber); }
 .prize-mvp {
   display: flex; align-items: center; gap: 16px; margin-bottom: 10px; padding: 14px 24px; background: var(--cell);
   border: 2px solid rgba(245, 165, 36, .5);
