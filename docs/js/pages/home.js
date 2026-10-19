@@ -1,11 +1,12 @@
-// Нүүр: нэр, огноо, дараагийн алхам хүртэлх тоолуур, хураамж ба шагналын сан, «Яаж оролцох» (5),
-// бүртгэлийн явц (12 баг — зөвхөн тоо), гол огноо, систем (6), «Шууд үзэх» (settings.stream_url байвал).
+// Нүүр: нэр, огноо, байршил, дараагийн алхам хүртэлх тоолуур, хураамж ба шагналын сан, «Яаж оролцох» (5),
+// бүртгэлийн явц (12 баг — зөвхөн тоо), гол огноо, систем (7), «Зохион байгуулагч» карт, «Шууд үзэх» (settings.stream_url байвал).
+// SPEC v6: хүн, байршлын нэр config.js-ийн STAFF, PLACES-ээс; захирлын нэрийг нийтийн сайтад харуулахгүй.
 // logic.js-ээс шууд хамаарахгүй (тэмцээний өдрүүдэд л schedule.js-ийг динамикаар ачаална).
 // SPEC v5: бүртгэл = бүрэлдэхүүн царцах 10.23 (Ба) 23:59 (settings.roster_freeze_at); сугалаа 10.22 (Пү) 16:00
 // (event.js DRAW_AT) бүрэлдэхүүнийг царцаахгүй.
-import { h, clear, fmtTime, fmtDate, fmtCountdown, contentFragment, mnt } from '../ui.js';
+import { h, clear, fmtTime, fmtDate, fmtCountdown, contentFragment, mnt, phoneLinks } from '../ui.js';
 import { store } from '../store.js';
-import { SCHOOL } from '../config.js';
+import { SCHOOL, STAFF, PLACES } from '../config.js';
 import { EVENT_NAME, DATES, DRAW_AT, FEE, PRIZES } from '../event.js';
 import { fillConfig } from './rules.js';
 
@@ -83,14 +84,14 @@ function keyDates(s, now) {
   const sameFreeze = same(s.reg, s.freeze);
   const items = [
     { end: DEF.drill, when: '10.19–23', text: 'Steam-ээр QR нэвтрэх дадлага' },
-    { end: s.draw, when: dt(s.draw), text: 'Техникийн зөвлөгөөн, хэсгийн сугалаа. Анги бүрээс ахлагч эсвэл төлөөлөгч ирнэ' },
+    { end: s.draw, when: dt(s.draw), text: `Техникийн зөвлөгөөн, хэсгийн сугалаа (${PLACES.lab}). Анги бүрээс ахлагч эсвэл төлөөлөгч ирнэ` },
     { end: s.consent, when: dt(s.consent), text: sameDue
       ? `Эцэг эхийн зөвшөөрөл (05, 05б), цаасан маягт 04, багийн хураамж ${mnt(FEE.team)}`
       : 'Эцэг эхийн зөвшөөрөл (05, 05б), цаасан маягт 04' },
     sameDue ? null : { end: s.fee, when: dt(s.fee), text: `Багийн хураамж ${mnt(FEE.team)}` },
     { end: s.reg, when: dt(s.reg), text: sameFreeze ? 'Онлайн бүртгэл хаагдана, бүрэлдэхүүн царцана' : 'Онлайн бүртгэл хаагдана (ангийн QR)' },
     sameFreeze ? null : { end: s.freeze, when: dt(s.freeze), text: 'Бүрэлдэхүүн царцана' },
-    { end: DEF.day1End, when: '10.24 (Бя) 09:45–16:45', text: '1-р өдөр: хэсгийн шат. Бүртгэл 08:30, нээлт 09:00' },
+    { end: DEF.day1End, when: '10.24 (Бя) 09:45–16:45', text: `1-р өдөр: хэсгийн шат. Бүртгэл 08:30, нээлт 09:00 (${PLACES.hall})` },
     { end: DEF.day2End, when: '10.25 (Ня) 09:30', text: '2-р өдөр: шөвгийн 8 · 13:00 шөвгийн 4 · 14:45 финал, 3-р байр · 16:15 шагнал' },
   ];
   return h('section', { class: 'hm-sec' },
@@ -110,7 +111,7 @@ function prizeCard(s) {
     h('div', { class: 'hm-fee' },
       h('span', { class: 'hm-fee-l' }, 'Багийн хураамж'),
       h('b', { class: 'hm-fee-v' }, mnt(FEE.team), h('small', {}, ' / анги')),
-      h('span', { class: 'hm-fee-d' }, `${dt(s.fee)} хүртэл сургуулийн нягтлан бодогчид төлж, баримт авна`)),
+      h('span', { class: 'hm-fee-d' }, `${dt(s.fee)} хүртэл зохион байгуулагч ${STAFF.organiser}д төлж, баримт авна`)),
     h('p', { class: 'hm-fund' }, 'Шагналын сан ', h('b', {}, mnt(PRIZES.fund))),
     h('ol', { class: 'hm-places' }, PRIZES.place.map((v, i) => h('li', { class: `hm-place p${i + 1}` },
       h('span', { class: 'hm-place-n' }, titles[i]),
@@ -120,6 +121,22 @@ function prizeCard(s) {
     h('p', { class: 'small muted hm-prize-note' },
       'Багш нарын баг хураамж төлөхгүй, мөнгөн шагнал авахгүй. Бүх хураамж шагналд зарцуулагдана. ',
       h('a', { href: '#/rules' }, 'Дэлгэрэнгүй →')));
+}
+
+/** «Зохион байгуулагч» (SPEC v6 §0b, §9): удирдамжид орсон хүмүүс, утас нь tel: холбоос. Захирлын нэргүй. */
+function orgCard() {
+  const row = (label, ...value) => [h('dt', {}, label), h('dd', {}, ...value)];
+  return h('section', { class: 'card hm-org', 'aria-labelledby': 'hm-org-h' },
+    h('h2', { id: 'hm-org-h' }, 'Зохион байгуулагч'),
+    h('dl', { class: 'org-list' },
+      row('Ерөнхий удирдлага', 'Сургалтын менежер ', h('b', {}, STAFF.lead)),
+      row('Зохион байгуулагч', 'Мэдээллийн технологийн багш ', h('b', {}, STAFF.organiser),
+        h('span', { class: 'org-tel' }, 'утас ', phoneLinks())),
+      row('Техникийн баг', 'Мэдээллийн технологийн багш нар ', h('b', {}, STAFF.it.join(', '))),
+      row('Зөвшөөрөл, хүүхэд хамгаалал', 'Нийгмийн ажилтан ', h('b', {}, STAFF.social))),
+    h('p', { class: 'small muted hm-org-note' },
+      'Хураамжийг зохион байгуулагчид, зөвшөөрлийг анги удирдсан багшид өгнө. Асуулт, хүсэлтээ зохион байгуулагчид хандана уу. ',
+      h('a', { href: '#/rules/org' }, 'Дэлгэрэнгүй →')));
 }
 
 function regChip(team) {
@@ -156,7 +173,7 @@ const LINKS = [
   ['#/bracket', 'Схем', 'Шөвгийн 8 → финал'],
   ['#/rules', 'Удирдамж', 'Гол дүрэм'],
   ['#/draw', 'Сугалаа', '10.22, шалгах'],
-  ['#/faq', 'Асуулт, хариулт', '14 асуулт'],
+  ['#/faq', 'Асуулт, хариулт', '15 асуулт'],
   ['#/downloads', 'Татах', 'Маягт, хуваарь'],
   ['#/privacy', 'Хувийн мэдээлэл', 'Юу цуглуулах вэ'],
 ];
@@ -184,9 +201,11 @@ export default async function render(root) {
       h('p', { class: 'hm-kicker' }, `${SCHOOL} · 8–12-р анги`),
       h('h1', {}, EVENT_NAME),
       h('p', { class: 'hm-when' }, '2026.10.24–25 (Бямба, Ням)'),
+      h('p', { class: 'hm-where' },
+        h('span', {}, h('b', {}, 'Тоглолт: '), PLACES.lab), h('span', {}, h('b', {}, 'Үзэгчид: '), `${PLACES.hall} (LED дэлгэц)`)),
       h('p', { class: 'muted' }, '12 баг · 20 тоглолт · Цомыг ганц баг өргөнө'),
       streamSlot),
-    noteSlot, nextSlot, prizeSlot, stepsSlot, regSlot, datesSlot, formatSlot,
+    noteSlot, nextSlot, prizeSlot, stepsSlot, regSlot, datesSlot, formatSlot, orgCard(),
     h('nav', { class: 'hm-links', 'aria-label': 'Хуудсууд' },
       LINKS.map(([href, title, sub]) => h('a', { class: 'hm-link', href }, h('b', {}, title), h('span', {}, sub))))));
 

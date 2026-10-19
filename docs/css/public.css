@@ -266,6 +266,22 @@ tr.gp-q td { background: var(--g-l); }
 .hm-mvp { margin: 10px 0 4px; }
 .hm-mvp b { color: var(--gold-ink); }
 .hm-prize-note { margin: 4px 0 0; }
+/* байршил, зохион байгуулагч (SPEC v6) */
+.hm-where { display: flex; flex-wrap: wrap; column-gap: 1.1em; color: #E2E8F0; font-size: .95rem; }
+.hm-where b { color: #fff; font-weight: 600; }
+.hm-org h2 { margin-top: 0; }
+.org-list { display: grid; grid-template-columns: minmax(0, 1fr); margin: 0; }
+.org-list dt { font-size: .82rem; font-weight: 700; color: var(--muted); margin-top: 10px; }
+.org-list dt:first-child { margin-top: 0; }
+.org-list dd { margin: 2px 0 0; color: var(--ink); min-width: 0; }
+.org-list dd b { color: var(--navy); }
+.org-tel { display: block; color: var(--muted); font-size: .95rem; }
+.hm-org-note { margin: 12px 0 0; }
+@media (min-width: 560px) {
+  .org-list { grid-template-columns: 13em minmax(0, 1fr); column-gap: 12px; row-gap: 10px; align-items: baseline; }
+  .org-list dt { margin-top: 0; }
+  .org-list dd { margin: 0; }
+}
 .fq-contact { margin: 6px 0 0 !important; }
 @media (min-width: 560px) {
   .hm-place-v { font-size: 1.15rem; }

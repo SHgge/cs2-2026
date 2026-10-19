@@ -3,6 +3,7 @@ import { h, toast, fmtDateTime, fmtCountdown } from '../ui.js';
 import { btn, section, chip, download } from './core.js';
 import { toCsv, fileStamp, isFuture, matchzyWithAliases, consentRowsWithAliases, mntText } from './util.js';
 import { DATES, FEE } from '../event.js';
+import { STAFF, PLACES } from '../config.js';
 
 const nPlayers = (t) => (Array.isArray(t.players) ? t.players.length : Number((t.reg && t.reg.players) || 0));
 const nConsents = (t) => (Array.isArray(t.players) ? t.players.filter((p) => p.consent_paper === true).length : Number((t.reg && t.reg.consents) || 0));
@@ -63,7 +64,7 @@ function teamCard(ctx, t) {
 async function doExport(ctx, kind) {
   const r = await ctx.call('export', { kind });
   if (!r.ok) return;
-  // Game feed names: the server export uses row 3б only; the hall projector (3а) shows the same feed,
+  // Game feed names: the server export uses row 3б only; the hall LED screen (3а) shows the same feed,
   // so streamName() needs BOTH 3а and 3б «Тийм» (fresh ticks/aliases from the overview).
   let teams = ctx.state.teams;
   if (kind === 'matchzy' || kind === 'consent') {
@@ -102,13 +103,13 @@ export function render(panel, ctx, ui) {
   const sameClose = !!S.reg_closes_at && Date.parse(S.reg_closes_at) === Date.parse(S.roster_freeze_at || '');
   panel.appendChild(section('Хугацаа',
     h('div', { class: 'row' }, chip(S.registration_open === false ? 'Бүртгэл хаалттай' : 'Бүртгэл нээлттэй', S.registration_open === false ? 'err' : 'ok')),
-    deadlineRow('Сугалаа (техникийн зөвлөгөөн)', DATES.draw_at),
+    deadlineRow(`Сугалаа (техникийн зөвлөгөөн, ${PLACES.lab})`, DATES.draw_at),
     deadlineRow('Зөвшөөрөл (05, 05б), маягт 04', S.consent_deadline_at),
-    deadlineRow('Багийн хураамж (нягтлан бодогч)', DATES.fee_due_at),
+    deadlineRow(`Багийн хураамж (зохион байгуулагч ${STAFF.organiser})`, DATES.fee_due_at),
     sameClose
       ? deadlineRow('Бүртгэл хаагдах, бүрэлдэхүүн царцах', S.reg_closes_at)
       : [deadlineRow('Бүртгэл хаагдах', S.reg_closes_at), deadlineRow('Бүрэлдэхүүн царцах', S.roster_freeze_at)],
-    h('p', { class: 'muted small adm-mt' }, `Хураамж ${mntText(FEE.team)} / ангийн баг (Багш нарын баг төлөхгүй). Төлбөрийн бүртгэлийг Excel 08 «Багууд»-д хөтөлж, төлсөн ангиудыг «Зарлал»-аар нийтэлнэ.`)));
+    h('p', { class: 'muted small adm-mt' }, `Хураамж ${mntText(FEE.team)} / ангийн баг (Багш нарын баг төлөхгүй). Зохион байгуулагч бэлнээр эсвэл сургуулийн дансаар баримттай хүлээн авч, бүртгэлийг Excel 08 «Багууд»-д (огноо, баримтын №) хөтөлнө; төлсөн ангиудыг «Зарлал»-аар нийтэлнэ. Анги удирдсан багш мөнгө хураахгүй.`)));
 
   const grid = h('div', { class: 'adm-teams' });
   const fill = () => {

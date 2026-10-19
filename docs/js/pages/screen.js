@@ -7,7 +7,8 @@
 // Export-ийн дохио: html[data-screen-ready="1"], html[data-slides], html[data-phase], .scr-stage[data-slide].
 import { h, clear, fmtTime, fmtDate } from '../ui.js';
 import { store } from '../store.js';
-import { BUILD, SITE_URL, SCHOOL, FB_PAGE, CONTACT_NAME, CONTACT_PHONES } from '../config.js';
+// SPEC v6: хүн (зохион байгуулагч), байршлын нэрийг (Windows lab, Урлагийн заал) зөвхөн config.js-ийн STAFF, PLACES-ээс авна.
+import { BUILD, SITE_URL, SCHOOL, FB_PAGE, CONTACT_PHONES, STAFF, PLACES } from '../config.js';
 import {
   PRIZES, FEE, GROUPS, GROUP_LABEL, GROUP_COLOR, STATION_LABEL, DATES, DRAW_AT, DAY_INFO, MATCHES, CHAMPION_TITLE,
 } from '../event.js';
@@ -115,6 +116,17 @@ const ICONS = {
   doc: ['M6 2.5h8l4 4v15H6z', 'M14 2.5v4h4', 'M9 12h6', 'M9 16h6'],
   ban: [{ c: [12, 12, 9] }, 'M5.7 5.7l12.6 12.6'],
   hourglass: ['M6.5 3h11', 'M6.5 21h11', 'M8 3c0 4.5 8 4.5 8 9s-8 4.5-8 9', 'M16 3c0 4.5-8 4.5-8 9s8 4.5 8 9'],
+  // өөрийн хэрэгсэл (gear слайд): хулгана, гар, чихэвч (микрофонтой); USB залгуур, санах ойн чип, шошго
+  mouse: [{ r: [5.5, 2.5, 13, 19, 6.5] }, 'M12 2.5v6.5', 'M5.5 9h13'],
+  keyboard: [{ r: [2, 5.5, 20, 13, 2] }, 'M6 9.5h.01', 'M10 9.5h.01', 'M14 9.5h.01', 'M18 9.5h.01', 'M8 12.5h.01', 'M12 12.5h.01',
+    'M16 12.5h.01', 'M7.5 15.5h9'],
+  headset: ['M4 14v-2a8 8 0 0 1 16 0v2', { r: [2.5, 13.5, 5, 7, 1.8] }, { r: [16.5, 13.5, 5, 7, 1.8] },
+    'M19 20.5v.2a2.3 2.3 0 0 1-2.3 2.3H13.5'],
+  plug: ['M9 2.5v5', 'M15 2.5v5', 'M6 7.5h12v3.5a5 5 0 0 1-5 5h-2a5 5 0 0 1-5-5z', 'M12 16v5.5'],
+  chip: [{ r: [6, 6, 12, 12, 2] }, { r: [9.5, 9.5, 5, 5, 1] }, 'M9.5 2.5v3.5', 'M14.5 2.5v3.5', 'M9.5 18v3.5', 'M14.5 18v3.5',
+    'M2.5 9.5h3.5', 'M2.5 14.5h3.5', 'M18 9.5h3.5', 'M18 14.5h3.5'],
+  tag: ['M3 4.6A1.6 1.6 0 0 1 4.6 3h6.3a1.6 1.6 0 0 1 1.13.47l8.6 8.6a1.6 1.6 0 0 1 0 2.26l-6.3 6.3a1.6 1.6 0 0 1-2.26 0l-8.6-8.6A1.6 1.6 0 0 1 3 10.9z',
+    { c: [7.6, 7.6, 1.4] }],
 };
 
 function icon(name, cls = '') {
@@ -283,7 +295,7 @@ export default async function render(root, params = {}) {
 
   const tickBox = h('div', { class: 'scr-tick' });
   const foot = h('footer', { class: 'scr-foot' }, tickBox,
-    h('div', { class: 'scr-contact' }, 'Асуулт: ', h('b', {}, CONTACT_NAME), ` · утас ${CONTACT_PHONES.join(', ')}`));
+    h('div', { class: 'scr-contact' }, 'Асуулт: ', h('b', {}, STAFF.organiser), ` · утас ${CONTACT_PHONES.join(', ')}`));
 
   const dbgRead = h('b', { class: 'scr-dbg-read' }, '');
   stage.append(h('div', { class: 'scr-bg', 'aria-hidden': 'true' }), head, main, rail, foot);
@@ -484,18 +496,22 @@ export default async function render(root, params = {}) {
   function tickerDefaults(p) {
     const s = settingsOf(state);
     const fb = `Шууд дамжуулалт: «${FB_PAGE}» Facebook хуудас`;
-    const come = 'Тоглолтоос 15 минутын өмнө хүлээлгийн өрөөнд ирээрэй';
+    // SPEC v6 §0b.4: баг ангидаа хүлээж, менежер (анги удирдсан багш) лабын үүдэнд авчирна.
+    const come = `Багууд ангидаа хүлээж, тоглолтоос 15 минутын өмнө менежертэйгээ ${PLACES.lab}-ын үүдэнд ирнэ`;
+    const gear = 'Өөрийн хулгана, гар, чихэвчээ авчирч болно: зөвхөн USB, программ суулгахгүй, макро хориотой';
     switch (p) {
       case 'reg': return [
         `Онлайн бүртгэл ${dayTime(s.reg)} хүртэл. Ангиа бүртгүүлээрэй!`,
-        `Хураамжаа нягтлан бодогчид, зөвшөөрлөө багшдаа ${dayTime(DATES.fee_due_at)} хүртэл өгөөрэй`,
+        `Хураамжаа зохион байгуулагч ${STAFF.organiser}д, зөвшөөрлөө багшдаа ${dayTime(DATES.fee_due_at)} хүртэл өгөөрэй`,
         'Охид, хөвгүүд ангийнхаа нэг багт тоглоно',
         `Шагналын сан ${money(PRIZES.fund)} + MVP ${money(PRIZES.mvp_cash)}`,
         `Steam QR дадлага 10.19–23. Утсандаа Steam${NBSP}Mobile апп суулгаарай`,
-        `Тэмцээнийг «${FB_PAGE}» Facebook хуудсаар, танхимын проектороор шууд үзнэ`,
+        gear,
+        `Тэмцээнийг ${PLACES.hall}ын LED дэлгэцээр, «${FB_PAGE}» Facebook хуудсаар шууд үзнэ`,
         'Skin, item, бооцоо байхгүй',
       ];
-      case 'closed': return ['Тоглогчид 10.24 (Бя) 08:30-д ирж бүртгүүлнэ. Нээлт 09:00-д', come, fb, 'Үзэгчид танхимаас үзнэ. Лабораторид орохгүй'];
+      case 'closed': return [`Тоглогчид 10.24 (Бя) 08:30-д ирж бүртгүүлнэ. Нээлт 09:00-д ${PLACES.hall}д`, come, gear, fb,
+        `Үзэгчид ${PLACES.hall}д LED дэлгэцээр үзнэ. ${PLACES.lab}-д орохгүй`];
       case 'day1': return [come, 'Тоглолтын үеэр утсаа шүүгчид хадгалуулна', fb, `Хуваарь, оноо: ${SITE_SHORT}`];
       case 'night': return ['10.25 (Ня) 09:30-д шөвгийн 8 эхэлнэ', come, fb, `Хуваарь, оноо: ${SITE_SHORT}`];
       case 'day2': return ['Финал, 3-р байрын тоглолт 14:45-д. Шагнал гардуулах ёслол 16:15-д', come, fb, `Хуваарь, оноо: ${SITE_SHORT}`];
@@ -549,16 +565,17 @@ export default async function render(root, params = {}) {
         'Анги удирдсан багшаасаа ангийн QR кодоо аваарай.',
         '6 тоглогчоо бүртгээрэй.',
         'Багш PIN кодоор баталгаажуулна.',
-        `${dayTime(DATES.fee_due_at)} хүртэл: эцэг эхийн зөвшөөрлөө багшдаа өгч, хураамжаа нягтлан бодогчид төлөөрэй.`,
+        `${dayTime(DATES.fee_due_at)} хүртэл: эцэг эхийн зөвшөөрлөө багшдаа өгч, хураамжаа зохион байгуулагч ${STAFF.organiser}д төлөөрэй.`,
       ].map((t, i) => h('div', { class: 'join-step' }, h('b', { class: 'join-n' }, pad2(i + 1)), h('span', {}, t))))),
 
+    // SPEC v6 §0b.3: хураамжийг зохион байгуулагч баримттайгаар хүлээн авна.
     fee: () => slideEl('fee',
       kick('Тэмцээний хураамж'),
       h('div', { class: 'fee-big' }, h('b', {}, money(FEE.team)), h('span', {}, '/ анги')),
-      h('div', { class: 'fee-per' }, `Тоглогч бүрд ойролцоогоор ${money(FEE.per_player)}`),
+      h('div', { class: 'fee-per' }, `Тоглогч бүрд ойролцоогоор ${money(FEE.per_player)}`, h('i', {}, '·'), h('b', {}, 'Төлөөгүй баг тоглохгүй')),
       h('div', { class: 'fee-cards' },
         h('div', { class: 'fcard' }, icon('doc'),
-          h('p', {}, 'Нягтлан бодогчид төлж, баримт авна. Төлөөгүй баг тоглохгүй.'),
+          h('p', {}, `Хураамжаа зохион байгуулагч ${STAFF.organiser}д төлж, баримт аваарай.`),
           h('div', { class: 'fee-due' }, icon('clock'), `${dayTime(DATES.fee_due_at)} хүртэл`)),
         h('div', { class: 'fcard' }, icon('trophy'),
           h('p', {}, 'Бүх хураамж шагналд зарцуулагдана. Багш нарын баг хураамж төлөхгүй.')))),
@@ -572,6 +589,21 @@ export default async function render(root, params = {}) {
           [icon('doc'), 'Эцэг эхийн зөвшөөрөл']].map(([ico, text]) => h('div', { class: 'req' },
           h('div', { class: 'req-ico' }, ico), h('span', {}, text), h('i', { class: 'req-ok' }, icon('check'))))),
       h('div', { class: 'req-drill' }, icon('calendar'), h('b', {}, 'Steam QR дадлага'), h('span', {}, '10.19–23'))),
+
+    // SPEC v6 §0b.6: сургуулийн хулгана, гар, чихэвч муу тул тоглогч өөрийнхөө хэрэгслийг сайн дураар авчирч болно.
+    gear: () => slideEl('gear',
+      kick('Заавал биш · сургуулийн хэрэгсэл бэлэн байна'),
+      title(['Өөрийн хэрэгслээ ', h('em', {}, 'авчир!')], 'gear-h'),
+      h('div', { class: 'gear-cards' },
+        [['mouse', 'Хулгана', 'дэвсгэртэйгээ'], ['keyboard', 'Гар', 'утасгүй бол цэнэглэ'], ['headset', 'Чихэвч', 'микрофонтой бол сайн']]
+          .map(([ico, name, sub]) => h('div', { class: 'gcard' },
+            h('div', { class: 'gcard-ico' }, icon(ico)), h('b', {}, name), h('span', {}, sub)))),
+      h('div', { class: 'gear-rules' },
+        [['plug', 'USB-ээр шууд залгагдана'],
+          ['chip', 'Программ суулгахгүй — тохиргоо төхөөрөмж дээрээ'],
+          ['ban', 'Макро, скрипт хориотой', 'no'],
+          ['tag', 'Нэр, ангиа шошголоод тоглолтын дараа авч яв']]
+          .map(([ico, text, cls]) => h('div', { class: `grule${cls ? ` ${cls}` : ''}` }, icon(ico), h('span', {}, text))))),
 
     teachers: () => slideEl('teachers',
       title('Багш нарыг ялж чадах уу?'),
@@ -632,6 +664,9 @@ export default async function render(root, params = {}) {
         title('Цомын төлөө 12 баг', 'scr-h-xl'),
         h('div', { class: 'ko3' }, [['08:30', at('08:30') || 'Бүртгэл'], ['09:00', at('09:00') || 'Нээлт'], [firstMatch, 'Эхний тоглолт']]
           .map(([t, l], i) => h('div', { class: `ko3-i${i === 2 ? ' gold' : ''}` }, h('b', {}, t), h('span', {}, l)))),
+        // SPEC v6 §0b.4: баг ангидаа хүлээж, лабын үүдэнд 15 минутын өмнө ирнэ.
+        h('div', { class: 'ko-note' }, icon('clock'),
+          h('span', {}, `Багууд ангидаа хүлээж, тоглолтоос 15 минутын өмнө ${PLACES.lab}-ын үүдэнд ирнэ.`)),
         h('div', { class: 'ko-art' }, h('i', { class: 'hero-rays deco' }), bigTrophy()));
     },
 
@@ -642,7 +677,7 @@ export default async function render(root, params = {}) {
       title('Тоглолтын дүрэм'),
       h('div', { class: 'rules' },
         h('div', { class: 'rule' }, h('div', { class: 'rule-k' }, icon('clock'), h('b', {}, '15 мин')),
-          h('p', {}, 'Тоглолтоос 15 минутын өмнө хүлээлгийн өрөөнд ирнэ.')),
+          h('p', {}, `Ангидаа хүлээж, тоглолтоос 15 минутын өмнө ${PLACES.lab}-ын үүдэнд ирнэ.`)),
         h('div', { class: 'rule hot' }, h('div', { class: 'rule-k' }, icon('hourglass'), h('b', {}, '13:0')),
           h('p', {}, '10 минутаас илүү хоцорвол техникийн ялагдал 13:0.')),
         h('div', { class: 'rule no' }, h('div', { class: 'rule-k' }, icon('ban')),
@@ -652,8 +687,9 @@ export default async function render(root, params = {}) {
       title('Шууд үзээрэй'),
       h('div', { class: 'watch' },
         h('div', { class: 'wcard' }, icon('broadcast'), h('b', {}, 'Facebook хуудас'), h('span', {}, `«${FB_PAGE}»`)),
-        h('div', { class: 'wcard' }, icon('monitor'), h('b', {}, 'Танхимын проектор'), h('span', {}, 'Тоглолтыг том дэлгэцээр'))),
-      h('div', { class: 'watch-note' }, icon('ban'), 'Үзэгчид лабораторид орохгүй.')),
+        // SPEC v6 §0b.4: үзэгчид Урлагийн заалын LED дэлгэцээр үзнэ.
+        h('div', { class: 'wcard' }, icon('monitor'), h('b', {}, 'LED дэлгэц'), h('span', {}, `${PLACES.hall}д`))),
+      h('div', { class: 'watch-note' }, icon('ban'), `Үзэгчид ${PLACES.lab}-д орохгүй.`)),
 
     live: () => {
       const now = clock.now();

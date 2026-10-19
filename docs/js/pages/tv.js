@@ -1,9 +1,9 @@
-// ТВ / танхимын дэлгэц: цаг, станц бүрийн ОДОО ба ДАРАА тоглолт, дараагийн ээлжийн дуудлага,
+// ТВ / Урлагийн заалын LED дэлгэц: цаг, станц бүрийн ОДОО ба ДАРАА тоглолт, дараагийн ээлжийн дуудлага (Windows lab-ын үүдэнд),
 // 20 секунд тутам «Хэсгийн байр» ↔ «Хасагдах шат» (?panel=groups|bracket — нэгийг нь тогтмол харуулна).
 // ?overlay=1 — OBS-д зориулсан ил тод доод мөр (?overlay=1&station=A — зөвхөн нэг станц). Зөвхөн ангийн нэр харуулна.
 import { h, clear, fmtTime, fmtDate } from '../ui.js';
 import { store } from '../store.js';
-import { SCHOOL, FB_PAGE } from '../config.js';
+import { SCHOOL, FB_PAGE, PLACES } from '../config.js';
 import { GROUPS, STATION_LABEL, EVENT_NAME, CUP_NAME } from '../event.js';
 import {
   makeClock, mergedMatches, stationNowNext, nextWave, sideInfo, scoreText, isDone, statusOf, stageTag,
@@ -108,7 +108,7 @@ export default async function render(root, params = {}) {
     call.hidden = false;
     const sameDay = ubDay(w.start) === ubDay(now);
     const at = now >= w.callAt ? 'Одоо' : `${sameDay ? '' : `${fmtDateShort(iso(w.callAt))} `}${fmtTime(iso(w.callAt))}-д`;
-    call.appendChild(h('b', { class: 'tv-call-t' }, `${at} хүлээлгийн өрөөнд ирээрэй`));
+    call.appendChild(h('b', { class: 'tv-call-t' }, `${at} ${PLACES.lab}-ын үүдэнд ирээрэй`));
     call.appendChild(h('span', { class: 'tv-call-m' }, w.matches.map((m) => {
       const A = sideInfo(cur, m, 'a'); const B = sideInfo(cur, m, 'b');
       return h('span', { class: `tv-call-p${m.grp ? ` gc-${m.grp}` : ''}` }, `${A.text} – ${B.text}`);
@@ -148,7 +148,8 @@ export default async function render(root, params = {}) {
     const ann = (cur && Array.isArray(cur.announcements) ? cur.announcements : []).filter((a) => a && a.text);
     const items = ann.length
       ? ann.map((a) => h('span', { class: `tv-ann${a.level === 'warn' ? ' warn' : ''}` }, a.text))
-      : [h('span', {}, 'Тоглолтоос 15 минутын өмнө хүлээлгийн өрөөнд ирээрэй'),
+      : [h('span', {}, `Багууд ангидаа хүлээж, тоглолтоос 15 минутын өмнө ${PLACES.lab}-ын үүдэнд ирнэ`),
+        h('span', {}, `Үзэгчид ${PLACES.lab}-д орохгүй`),
         h('span', {}, 'Тоглолтын үеэр утсаа шүүгчид хадгалуулна'),
         h('span', {}, `Шууд дамжуулалт: «${FB_PAGE}» Facebook хуудас`)];
     ticker.appendChild(h('div', { class: 'tv-tick' }, items));

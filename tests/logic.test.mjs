@@ -732,3 +732,78 @@ describe('teamSchedule', () => {
     assert.deepEqual(times, [...times].sort((a, b) => a - b));
   });
 });
+
+// ================================================================ SPEC v6: public pages (people, places)
+// Public-UI sources only (content fragments, public page modules, shell, public CSS). No DOM: plain text checks.
+describe('SPEC v6: public pages — people and places', () => {
+  const DOCS = new URL('../docs/', import.meta.url);
+  const read = (rel) => readFileSync(new URL(rel, DOCS), 'utf8').normalize('NFC');
+  const PAGES = ['home', 'rules', 'schedule', 'groups', 'bracket', 'faq', 'downloads', 'privacy', 'draw', 'tv'].map((p) => `js/pages/${p}.js`);
+  const CONTENT = ['home', 'rules', 'faq', 'privacy'].map((p) => `content/${p}.html`);
+  const PUBLIC = [...CONTENT, ...PAGES, 'index.html', '404.html', 'css/public.css', 'css/app.css'];
+  const noComments = (src) => src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1');
+
+  test('config.js STAFF and PLACES hold the SPEC v6 people and places', async () => {
+    const { STAFF, PLACES, CONTACT_NAME, CONTACT_PHONES } = await import('../docs/js/config.js');
+    assert.deepEqual({ ...STAFF, it: [...STAFF.it] }, {
+      director: 'Д.Бямбасамбуу', lead: 'Г.Жаргал', organiser: 'А.Мөнгөншагай',
+      it: ['А.Мөнгөншагай', 'Б.Даваа', 'Д.Мажигсүрэн'], social: 'Г.Энхнаран',
+    });
+    assert.equal(CONTACT_NAME, STAFF.organiser);
+    assert.deepEqual([...CONTACT_PHONES], ['60114971', '94741053']);
+    assert.deepEqual({ ...PLACES }, { lab: 'Windows lab', hall: 'Урлагийн заал' });
+  });
+
+  test('no committee, accountant, waiting room, projector, old titles, removed v5 wording or [placeholders]', () => {
+    const BAD = [
+      ['committee «хороо»', /хороо/iu],
+      ['accountant', /нягтлан/iu],
+      ['old title «мэдээлэл зүйн багш»', /мэдээлэл\s+зүйн\s+багш/iu],
+      ['waiting room', /хүлээлгийн\s+өрөө/iu],
+      ['projector', /проектор/iu],
+      ['placeholder', /\[(?:Захирлын овог нэр|Сургалтын менежерийн нэр|Мэдээлэл зүйн багшийн нэр|Нийгмийн ажилтны нэр|Нягтлан бодогчийн нэр|Лабын тоот|Танхимын нэр|Өрөөний тоот|Хот, дүүрэг|Утас|Овог нэр|И-мэйл)\]/u],
+      ['removed v5 wording', /Ангийн\s+аварга|төлбөргүй|хураамжгүй|батламж|Шударга\s+тоглолт|Шилдэг\s+тайлбарлагч|Бэлэн\s+мөнгө|10\.16\s*\(Ба\)\s*17:00|10\.21\s*\(Лх\)\s*17:00/iu],
+      ['old budget totals', /2(?:\s|&nbsp;)333(?:\s|&nbsp;)100|1(?:\s|&nbsp;)838(?:\s|&nbsp;)100|2(?:\s|&nbsp;)121(?:\s|&nbsp;)000/u],
+    ];
+    for (const rel of PUBLIC) {
+      const src = read(rel);
+      for (const [label, re] of BAD) assert.doesNotMatch(src, re, `${rel}: ${label}`);
+    }
+  });
+
+  test('names come from config.js: the director is never shown; page modules import STAFF / PLACES', async () => {
+    const { STAFF, PLACES } = await import('../docs/js/config.js');
+    for (const rel of PUBLIC) assert.ok(!read(rel).includes(STAFF.director), `${rel} names the director`);
+    for (const rel of PAGES) {
+      const src = noComments(read(rel));
+      for (const v of [STAFF.lead, STAFF.organiser, STAFF.social, ...STAFF.it, PLACES.lab, PLACES.hall]) {
+        assert.ok(!src.includes(v), `${rel} hard-codes «${v}» — import STAFF / PLACES from config.js`);
+      }
+    }
+  });
+
+  test('content fragments: every data-cfg key exists and its fallback text equals the config value', async () => {
+    const { CFG } = await import('../docs/js/pages/rules.js');
+    let n = 0;
+    for (const rel of CONTENT) {
+      for (const m of read(rel).matchAll(/<(\w+)\b[^>]*\bdata-cfg="([A-Z_]+)"[^>]*>([^<]*)<\/\1>/g)) {
+        n += 1;
+        assert.ok(Object.hasOwn(CFG, m[2]), `${rel}: unknown data-cfg key ${m[2]}`);
+        assert.equal(m[3], CFG[m[2]], `${rel}: fallback text of data-cfg="${m[2]}"`);
+      }
+    }
+    assert.ok(n >= 20, `expected the people/places spans in the fragments, found ${n}`);
+  });
+
+  test('rules: 12 numbered cards incl. «Өөрийн хэрэгсэл» and «Зохион байгуулалт»; FAQ count matches the home link', () => {
+    const rules = read('content/rules.html');
+    const ids = [...rules.matchAll(/<article class="card rl-card" id="(rl-[a-z0-9-]+)">\s*<h2><span class="rl-n">(\d+)<\/span>/g)];
+    assert.equal(ids.length, 12);
+    assert.deepEqual(ids.map((m) => Number(m[2])), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
+    for (const id of ['rl-gear', 'rl-org', 'rl-fee', 'rl-time']) assert.ok(ids.some((m) => m[1] === id), id);
+    const faq = (read('content/faq.html').match(/<details>/g) || []).length;
+    const link = read('js/pages/home.js').match(/'(\d+) асуулт'/);
+    assert.ok(link, 'home links show the FAQ count');
+    assert.equal(Number(link[1]), faq);
+  });
+});

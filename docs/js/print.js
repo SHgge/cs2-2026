@@ -4,7 +4,7 @@
 //   ref    — шүүгчийн QR хуудас (4), secret — сугалааны нууц тоо.
 // Нууц кодыг зөвхөн санах ойгоос (admin/vault.js) уншина: хуудсыг шинэчилбэл устна.
 import { h, clear, errorBox, mnt } from './ui.js';
-import { SITE_URL, SCHOOL, FB_PAGE } from './config.js';
+import { SITE_URL, SCHOOL, FB_PAGE, CONTACT_PHONE, STAFF, PLACES } from './config.js';
 import { EVENT_NAME, CUP_NAME, FEE, PRIZES } from './event.js';
 import { vault } from './admin/vault.js';
 import { loadQr, qrNode } from './admin/qr.js';
@@ -17,6 +17,8 @@ const TITLE = EVENT_NAME;
 const LOGO = 'assets/img/logo-192.png';
 const LOGO_BIG = 'assets/img/logo-512.png';
 const BACK_ACCESS = ['#/admin?tab=access', 'Админ руу буцах'];
+/** SPEC v6: хүсэлт, асуулт — зохион байгуулагч (мэдээллийн технологийн багш); нэрийг config.js-ийн STAFF-аас авна. */
+const CONTACT = `Асуулт: зохион байгуулагч ${STAFF.organiser}, утас ${CONTACT_PHONE}`;
 const NO_CODES = 'Хэвлэх код энэ цонхны санах ойд алга (хуудсыг шинэчилсэн эсвэл эрх олгоогүй). Админ → «Эрх, хэвлэх» хэсэгт эрх олгоод энэ хуудсыг дахин нээнэ үү.';
 
 const STEPS_STUDENT = [
@@ -52,6 +54,7 @@ function classCard(qr, it, deadline) {
       qrNode(qr, classLink(it.token), 'pr-qr-card'),
       h('ol', { class: 'pr-steps' }, (adult ? STEPS_ADULT : STEPS_STUDENT).map((s) => h('li', {}, s)))),
     h('div', { class: 'pr-card-deadline' }, `Хугацаа: ${deadline}`),
+    h('div', { class: 'pr-contact' }, CONTACT),
     h('div', { class: 'pr-warn' }, adult ? 'Холбоосыг зөвхөн багийн гишүүдэд хуваалцана уу.' : 'Холбоосыг зөвхөн ангийн чатад хуваалцаарай.'));
 }
 
@@ -64,7 +67,7 @@ function pinSlip(it, deadline) {
     h('div', { class: 'pr-pin-codebox' },
       h('span', { class: 'pr-pin-label' }, t ? 'Ахлагчийн PIN:' : 'Багшийн PIN:'), h('b', { class: 'pr-pin-code' }, it.pin)),
     h('div', { class: 'pr-pin-warn' }, t ? 'Бусдад бүү өгнө үү.' : 'Сурагчдад бүү өгнө үү.'),
-    h('p', { class: 'pr-pin-note' }, `${t ? 'Багийн мэдээллийг бөглөсний дараа ахлагч' : 'Сурагчид мэдээллээ бөглөсний дараа'} энэ PIN-ээр батална уу. Хугацаа: ${deadline}. 5 удаа буруу оруулбал 15 минут түгжигдэнэ.`));
+    h('p', { class: 'pr-pin-note' }, `${t ? 'Багийн мэдээллийг бөглөсний дараа ахлагч' : 'Сурагчид мэдээллээ бөглөсний дараа'} энэ PIN-ээр батална уу. Хугацаа: ${deadline}. 5 удаа буруу оруулбал 15 минут түгжигдэнэ. ${CONTACT}.`));
 }
 
 function refSlip(qr, r) {
@@ -122,6 +125,7 @@ function buildSite(qr) {
       h('p', { class: 'pr-site-url' }, siteLabel()),
       h('ul', { class: 'pr-site-list' }, ['Хуваарь, хэсгийн байр, оноо', 'Шууд дамжуулалтын холбоос', 'Удирдамж, асуулт хариулт'].map((t) => h('li', {}, t))),
       h('p', { class: 'pr-site-prize' }, `Шагналын сан ${mnt(PRIZES.fund)} · «${CUP_NAME}» шилжин явах цом · MVP ${mnt(PRIZES.mvp_cash)} + жижиг цом`),
+      h('p', { class: 'pr-site-contact' }, CONTACT),
       h('p', { class: 'pr-site-foot' }, `Шууд дамжуулалт: Facebook «${FB_PAGE}» · Хураамж ${mnt(FEE.team)}\u00A0/\u00A0анги · Skin, item, бооцоо байхгүй · Valve-ийн албан ёсны тэмцээн биш`))],
   };
 }
@@ -133,7 +137,7 @@ function buildSecret() {
     sheets: [sheet('pr-secret',
       brand('Нууц — битүүмжилнэ'),
       h('h1', {}, 'Сугалааны нууц тоо'),
-      h('p', {}, 'Сугалаа: 10.22 (Пү) 16:00, техникийн зөвлөгөөн'),
+      h('p', {}, `Сугалаа: 10.22 (Пү) 16:00, техникийн зөвлөгөөн (${PLACES.lab})`),
       h('div', { class: 'pr-secret-box' }, secretGroups(d.secret, 8)),
       h('p', { class: 'pr-secret-commit' }, h('b', {}, 'Commit (нийтэд ил): '), h('span', {}, d.commit)),
       h('p', {}, `Үүсгэсэн: ${shortDateTime(d.at)}`),

@@ -2,7 +2,7 @@
 import { h, clear } from '../ui.js';
 
 const FILES = [
-  { no: '02', title: 'Тэмцээний удирдамж', note: 'Бүтэн дүрэм, систем, хураамж, шагнал, хуваарь.', href: 'assets/docs/02_Udirdamj.docx', kind: 'DOCX' },
+  { no: '02', title: 'Тэмцээний удирдамж', note: 'Бүтэн эх: зохион байгуулалт, систем, хураамж, шагналын сан, өөрийн хэрэгсэл, хуваарь.', href: 'assets/docs/02_Udirdamj.docx', kind: 'DOCX' },
   { no: '05', title: 'Эцэг эхийн зөвшөөрөл', note: '05б хамт (3-р хуудас). Хэвлэж бөглөөд 10.23 (Ба) 17:00 хүртэл анги удирдсан багшид өгнө үү.', href: 'assets/docs/05_Zovshoorol.docx', kind: 'DOCX', key: true },
   { no: '05б', title: 'Нэмэлт зөвшөөрөл (цахим бүртгэл)', note: 'Бүх оролцогч бөглөнө. 05-ыг өмнө нь авсан бол зөвхөн үүнийг хэвлэнэ үү.', href: 'assets/docs/05b_Nemelt_zovshoorol.docx', kind: 'DOCX' },
   { no: '06', title: 'Тоглолтын дүрэм ба ёс зүй', note: 'Тоглогч, менежер бүр уншиж танилцана.', href: 'assets/docs/06_Durem.docx', kind: 'DOCX' },

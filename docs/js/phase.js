@@ -3,18 +3,19 @@
 // All times are absolute instants (ms since epoch); calendar comparisons use fixed UTC+8 (Asia/Ulaanbaatar, no DST).
 import { DATES, DRAW_AT, MATCHES } from './event.js';
 
-/** Every slide the screen can show, in a stable order. */
+/** Every slide the screen can show, in a stable order. 'gear' (SPEC v6 §0b.6): players may bring their own gear. */
 export const SLIDE_IDS = Object.freeze([
-  'hero', 'race', 'prize', 'join', 'fee', 'req', 'teachers', 'format', 'groups', 'dates',
+  'hero', 'race', 'prize', 'join', 'fee', 'req', 'gear', 'teachers', 'format', 'groups', 'dates',
   'kickoff', 'day1', 'day2', 'rules', 'watch', 'live', 'standings', 'bracket', 'champion', 'thanks',
 ]);
 
 /** Short tab label of each slide («03/10 · ШАГНАЛ» — the page uppercases it). */
 export const SLIDE_LABEL = Object.freeze({
   hero: 'Уриалга', race: 'Бүртгэлийн уралдаан', prize: 'Шагнал', join: 'Яаж оролцох', fee: 'Хураамж',
-  req: 'Бэлтгэл', teachers: 'Багш нарын баг', format: 'Систем', groups: 'Хэсгүүд', dates: 'Гол хугацаа',
-  kickoff: 'Тэмцээн эхэлнэ', day1: '1-р өдөр', day2: '2-р өдөр', rules: 'Дүрэм', watch: 'Шууд үзэх',
-  live: 'Одоо', standings: 'Хэсгийн дүн', bracket: 'Хасагдах шат', champion: 'Аварга', thanks: 'Баярлалаа',
+  req: 'Бэлтгэл', gear: 'Өөрийн хэрэгсэл', teachers: 'Багш нарын баг', format: 'Систем', groups: 'Хэсгүүд',
+  dates: 'Гол хугацаа', kickoff: 'Тэмцээн эхэлнэ', day1: '1-р өдөр', day2: '2-р өдөр', rules: 'Дүрэм',
+  watch: 'Шууд үзэх', live: 'Одоо', standings: 'Хэсгийн дүн', bracket: 'Хасагдах шат', champion: 'Аварга',
+  thanks: 'Баярлалаа',
 });
 
 /** Event-day boundaries used by the screen (SPEC v5 §7). */
@@ -120,15 +121,16 @@ export function wavesOf(day) {
 
 /**
  * Slide ids for the rotation. live=false (export/static mode) drops slides that only make sense with live data
- * (the registration race and the «now playing» board).
+ * (the registration race and the «now playing» board). The own-gear slide follows «req» (registration week) and
+ * «rules» (the night before day 1).
  */
 export function slidesFor(now, state, { live = true } = {}) {
   const p = screenPhase(now, state);
   const groups = drawShown(state) ? 'groups' : null;
   let list;
   switch (p) {
-    case 'reg': list = ['hero', live ? 'race' : null, 'prize', 'join', 'fee', 'req', 'teachers', 'format', groups, 'dates']; break;
-    case 'closed': list = ['kickoff', groups, 'day1', 'day2', 'prize', 'rules', 'watch']; break;
+    case 'reg': list = ['hero', live ? 'race' : null, 'prize', 'join', 'fee', 'req', 'gear', 'teachers', 'format', groups, 'dates']; break;
+    case 'closed': list = ['kickoff', groups, 'day1', 'day2', 'prize', 'rules', 'gear', 'watch']; break;
     case 'day1': list = live ? ['live', 'standings', 'live', 'day1', 'prize', 'watch'] : ['standings', 'day1', 'prize', 'watch']; break;
     case 'night': list = ['standings', 'day2', 'prize', 'watch']; break;
     case 'day2': list = live ? ['live', 'bracket', 'live', 'day2', 'prize', 'watch'] : ['bracket', 'day2', 'prize', 'watch']; break;

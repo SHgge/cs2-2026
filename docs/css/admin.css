@@ -216,7 +216,7 @@ details.adm-sec > summary { font-size: 1.05rem; }
 .pr-brand-tag { margin-left: auto; align-self: flex-start; font-size: 7pt; color: #6B7280; text-transform: uppercase; letter-spacing: .02em; text-align: right; }
 
 /* class card (94.5 × 90 mm) */
-.pr-card { padding: 4mm 5mm; display: flex; flex-direction: column; gap: 1.5mm; }
+.pr-card { padding: 3.5mm 5mm; display: flex; flex-direction: column; gap: 1.1mm; }
 .pr-card-name { font-size: 28pt; font-weight: 800; line-height: 1; color: #1F2A44; }
 .pr-card-name.long { font-size: 20pt; line-height: 1.25; }
 .pr-card-body { display: flex; gap: 3.5mm; align-items: flex-start; }
@@ -224,6 +224,7 @@ details.adm-sec > summary { font-size: 1.05rem; }
 .pr-card .pr-steps { font-size: 8.5pt; line-height: 1.25; gap: 1.2mm; }
 .pr-card-deadline { font-size: 11pt; font-weight: 700; margin-top: auto; }
 .pr-card .pr-warn { padding: 1mm 2mm; }
+.pr-contact { font-size: 7.5pt; line-height: 1.25; color: #374151; }
 
 /* teacher PIN slip (94.5 × 45 mm): brand / team + warning | PIN / note */
 .pr-pin {
@@ -265,6 +266,7 @@ details.adm-sec > summary { font-size: 1.05rem; }
 .pr-site-list { list-style: none; padding: 0; margin: 0; font-size: 12pt; display: flex; flex-wrap: wrap; justify-content: center; gap: 2mm 6mm; }
 .pr-site-list li::before { content: "✓ "; color: #15803D; font-weight: 800; }
 .pr-site-prize { margin: 0; font-size: 12pt; font-weight: 700; color: #8A6508; text-wrap: balance; }
+.pr-site-contact { margin: 0; font-size: 12pt; font-weight: 700; color: #1F2A44; }
 .pr-site-foot { margin: auto 0 0; font-size: 9pt; color: #6B7280; text-wrap: balance; }
 
 /* draw secret */

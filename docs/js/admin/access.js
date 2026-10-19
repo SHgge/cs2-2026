@@ -3,6 +3,7 @@
 import { h, toast, fmtDateTime, copyText } from '../ui.js';
 import { btn, section, chip, confirmDialog } from './core.js';
 import { vault } from './vault.js';
+import { PLACES } from '../config.js';
 import {
   shortDateTime, classLinkMessage, pinMessage, linksList, pinsList, refLink, DEFAULT_REG_CLOSES, REF_VALID_FROM, REF_VALID_TO,
 } from './util.js';
@@ -151,7 +152,7 @@ export function render(panel, ctx) {
 
   /* ---- site poster ---- */
   panel.appendChild(section('Сайтын QR зурагт хуудас',
-    h('p', { class: 'muted small' }, 'Самбар, анги, танхимд наах A4 хуудас. Нууц код агуулахгүй.'),
+    h('p', { class: 'muted small' }, `Самбар, анги, ${PLACES.hall}д наах A4 хуудас. Нууц код агуулахгүй.`),
     btn('Зурагт хуудас нээх', () => goPrint('site'), 'secondary')));
 
   return vault.subscribe(() => ctx.rerender());

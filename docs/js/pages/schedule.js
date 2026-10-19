@@ -2,6 +2,7 @@
 // Өгөгдлийг зөвхөн ui.h (textContent)-ээр гаргана. Тоглогчийн нэр хэзээ ч харуулахгүй — зөвхөн ангийн нэр.
 import { h, clear, fmtTime, fmtDate, loading, groupChip } from '../ui.js';
 import { store } from '../store.js';
+import { PLACES } from '../config.js';
 import { MATCHES, DAY_INFO, GROUP_LABEL, STATION_LABEL, TEAMS } from '../event.js';
 import { resolveMatches, fmtScore } from '../logic.js';
 
@@ -147,7 +148,7 @@ export function stationNowNext(rows, station, now) {
   const last = [...list].reverse().find((m) => isDone(m) && tms(m.start) <= now) || null;
   return { current, next, last };
 }
-/** Дараагийн ээлж: 15 минутын өмнө хүлээлгийн өрөөнд дуудна. */
+/** Дараагийн ээлж: багуудыг 15 минутын өмнө ангиас нь дуудаж, Windows lab-ын үүдэнд авчирна (SPEC v6 §0b.4). */
 export function nextWave(rows, now) {
   const fut = rows.filter((m) => !isDone(m) && m.status !== 'live' && tms(m.start) > now);
   if (!fut.length) return null;
@@ -266,8 +267,12 @@ const POSTERS = {
   d2: ['assets/img/12b_Huvaari_2r_odor.png', '2-р өдрийн зурагт хуваарь'],
 };
 
+/** DAY_INFO мөрийн байршил (SPEC v6 §7): нээлт Урлагийн заалд. */
+const VENUE = { d1: { '09:00': PLACES.hall } };
+
 function infoRow(it) {
-  return h('div', { class: 'sc-info' }, h('b', {}, it.hhmm), h('span', {}, it.text));
+  return h('div', { class: 'sc-info' }, h('b', {}, it.hhmm),
+    h('span', {}, it.text, it.venue ? h('span', { class: 'sc-venue' }, ` (${it.venue})`) : null));
 }
 
 function slotRow(state, it, now) {
@@ -294,7 +299,7 @@ function timeline(state, rows, day, now) {
   const items = [];
   for (const [t, ms] of slots) items.push({ t, kind: 'slot', ms });
   for (const [hhmm, text] of ((DAY_INFO && DAY_INFO[day.info]) || [])) {
-    items.push({ t: tms(`${day.key}T${hhmm}:00+08:00`), kind: 'info', hhmm, text });
+    items.push({ t: tms(`${day.key}T${hhmm}:00+08:00`), kind: 'info', hhmm, text, venue: (VENUE[day.info] || {})[hhmm] || null });
   }
   items.sort((a, b) => (a.t - b.t) || (a.kind === 'info' ? -1 : 1));
   for (const it of items) list.appendChild(it.kind === 'info' ? infoRow(it) : slotRow(state, it, now));
@@ -324,7 +329,8 @@ function legend(day) {
         h('p', {}, 'Хожил 3, тэнцээ 1, хожигдол 0 оноо. Хэсгийн 1, 2-р байр шөвгийн 8-д шалгарна.')]
       : [h('p', {}, 'А№1 = А хэсгийн 1-р байр. Нэг хэсгийн 2 баг дахин таарвал зөвхөн финал эсвэл 3-р байрын тоглолтод таарна.'),
         h('p', {}, '16:15 — хаалт: шагнал гардуулах, шилжин явах цом, MVP зарлах.')],
-    h('p', {}, 'Тоглолтоос 15 минутын өмнө хүлээлгийн өрөөнд ирээрэй. 10 минутаас илүү хоцорвол 13:0 техникийн ялагдал.'));
+    h('p', {}, `Багууд ангидаа хүлээнэ. Тоглолтоос 15 минутын өмнө менежер багаа ${PLACES.lab}-ын үүдэнд авчирна. `
+      + '10 минутаас илүү хоцорвол 13:0 техникийн ялагдал.'));
 }
 
 function posters(day) {
@@ -348,7 +354,8 @@ export default async function render(root, params = {}) {
   clear(root);
   root.appendChild(h('div', { class: 'pub sc' },
     h('h1', {}, 'Тоглолтын хуваарь'),
-    h('p', { class: 'muted' }, 'Нэг удаад 2 тоглолт: А станц, Б станц. Цаг нь Улаанбаатарын цагаар.'),
+    h('p', { class: 'muted' }, `Тоглолт ${PLACES.lab}-д явагдана. Нэг удаад 2 тоглолт: А станц, Б станц. `
+      + `Үзэгчид ${PLACES.hall}д LED дэлгэцээр үзнэ. Цаг нь Улаанбаатарын цагаар.`),
     tabs, body));
 
   const drawTabs = () => {

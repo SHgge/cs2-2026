@@ -1,10 +1,23 @@
-// «Удирдамж»: 11 товч карт (content/rules.html) + бүтэн баримт (02, 06) татах холбоос.
+// «Удирдамж»: 12 товч карт (content/rules.html) + бүтэн баримт (02, 06) татах холбоос.
+// #/rules/<id> (жишээ нь #/rules/gear) — тухайн карт (article#rl-<id>) руу шууд гүйлгэнэ.
 // contentInto/fillConfig-ийг faq, privacy, home бас ашиглана.
 import { h, clear, contentFragment, phoneLinks } from '../ui.js';
-import { SCHOOL, FB_PAGE, CONTACT_NAME, CONTACT_PHONE } from '../config.js';
+import { SCHOOL, FB_PAGE, CONTACT_NAME, CONTACT_PHONE, STAFF, PLACES } from '../config.js';
 import { EVENT_NAME } from '../event.js';
 
-const CFG = { SCHOOL, FB_PAGE, CONTACT_NAME, CONTACT_PHONE, EVENT_NAME };
+/**
+ * [data-cfg] түлхүүрүүд. SPEC v6: хүн, байршлын нэрийг зөвхөн config.js-ийн STAFF, PLACES-ээс авна
+ * (захирлын нэрийг нийтийн сайтад харуулахгүй). Тийн ялгалын нөхцөлийг (-д, -тай …) HTML-д span-ын ард бичнэ.
+ */
+export const CFG = Object.freeze({
+  SCHOOL, FB_PAGE, CONTACT_NAME, CONTACT_PHONE, EVENT_NAME,
+  LEAD: STAFF.lead,                 // сургалтын менежер — ерөнхий удирдлага
+  ORGANISER: STAFF.organiser,       // зохион байгуулагч (мэдээллийн технологийн багш), хураамж хүлээн авна
+  IT_TEAM: STAFF.it.join(', '),     // техникийн баг (мэдээллийн технологийн багш нар)
+  SOCIAL: STAFF.social,             // нийгмийн ажилтан — зөвшөөрөл, хүүхэд хамгаалал
+  LAB: PLACES.lab,                  // тоглолт
+  HALL: PLACES.hall,                // үзэгчид, LED дэлгэц
+});
 
 /**
  * Статик хэсгийн [data-cfg] нүдийг config.js-ийн утгаар (textContent) бөглөнө.
@@ -50,7 +63,13 @@ function tocFor(frag, box) {
     })));
 }
 
-export default async function render(root) {
+/** #/rules/<id> → article#rl-<id> (зөвхөн жижиг латин үсэг, тоо, зураас). */
+function cardFor(frag, arg) {
+  const id = String(arg || '').toLowerCase();
+  return /^[a-z0-9-]{1,20}$/.test(id) ? frag.querySelector(`article#rl-${id}`) : null;
+}
+
+export default async function render(root, params = {}) {
   const slot = h('div', { class: 'rl-cards' });
   const toc = h('div', {});
   clear(root);
@@ -63,6 +82,10 @@ export default async function render(root) {
     toc,
     slot,
     h('p', { class: 'small muted rl-foot' },
-      'Энэ хуудас нь товчлол. Зөрүү гарвал батлагдсан удирдамж (02) хүчинтэй.')));
-  contentInto(slot, 'rules', (frag) => tocFor(frag, toc));
+      'Энэ хуудас нь товчлол. Зөрүү гарвал тэмцээний удирдамж (02) хүчинтэй.')));
+  contentInto(slot, 'rules', (frag) => {
+    tocFor(frag, toc);
+    const card = cardFor(frag, params && params.arg);
+    if (card) requestAnimationFrame(() => card.scrollIntoView({ block: 'start' }));
+  });
 }

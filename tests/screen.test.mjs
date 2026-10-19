@@ -50,15 +50,15 @@ const LIVE = 'Одоо тоглож байна';
 const QF = 'Шөвгийн 8 эхлэх хүртэл';
 const AWARDS = 'Шагнал гардуулах хүртэл';
 const CHIP = 'Өнөөдөр 16:00 — хэсгийн сугалаа';
-const REG = ['hero', 'race', 'prize', 'join', 'fee', 'req', 'teachers', 'format', 'dates'];
-const CLOSED = ['kickoff', 'day1', 'day2', 'prize', 'rules', 'watch'];
+const REG = ['hero', 'race', 'prize', 'join', 'fee', 'req', 'gear', 'teachers', 'format', 'dates'];
+const CLOSED = ['kickoff', 'day1', 'day2', 'prize', 'rules', 'gear', 'watch'];
 const LIVE_ONLY = new Set(['race', 'live']);
 
 // ================================================================ constants
 describe('phase.js constants', () => {
-  test('SLIDE_IDS: 20 unique URL-safe ids, each with a label; frozen', () => {
-    assert.equal(SLIDE_IDS.length, 20);
-    assert.equal(new Set(SLIDE_IDS).size, 20);
+  test('SLIDE_IDS: 21 unique URL-safe ids, each with a label; frozen', () => {
+    assert.equal(SLIDE_IDS.length, 21);
+    assert.equal(new Set(SLIDE_IDS).size, 21);
     assert.deepEqual(Object.keys(SLIDE_LABEL).sort(), [...SLIDE_IDS].sort());
     for (const id of SLIDE_IDS) {
       assert.match(id, /^[a-z0-9]+$/, id);                     // used in ?slide=<id> and data-slide
@@ -228,13 +228,13 @@ describe('slidesFor', () => {
     }
     const pub = regState({ draw: 'published' });
     const t2 = at('2026-10-22T16:30:00');
-    assert.deepEqual(slidesFor(t2, pub), ['hero', 'race', 'prize', 'join', 'fee', 'req', 'teachers', 'format', 'groups', 'dates']);
-    assert.deepEqual(slidesFor(t2, pub, { live: false }), ['hero', 'prize', 'join', 'fee', 'req', 'teachers', 'format', 'groups', 'dates']);
+    assert.deepEqual(slidesFor(t2, pub), ['hero', 'race', 'prize', 'join', 'fee', 'req', 'gear', 'teachers', 'format', 'groups', 'dates']);
+    assert.deepEqual(slidesFor(t2, pub, { live: false }), ['hero', 'prize', 'join', 'fee', 'req', 'gear', 'teachers', 'format', 'groups', 'dates']);
     pub.draw.groups = null;
     assert.ok(!slidesFor(t2, pub).includes('groups'));
   });
 
-  test('closed: kickoff, groups after the draw, the two days, prize, rules, watch', () => {
+  test('closed: kickoff, groups after the draw, the two days, prize, rules, gear, watch', () => {
     const t = at('2026-10-24T02:00:00');
     assert.deepEqual(slidesFor(t, makeState({ drawStatus: 'none' })), CLOSED);
     assert.deepEqual(slidesFor(t, makeState({ drawStatus: 'computed' })), CLOSED);
@@ -257,6 +257,53 @@ describe('slidesFor', () => {
       assert.deepEqual(slidesFor(at(t), st, { live: false }), still, t);
     }
     assert.deepEqual(slidesFor(at('2026-10-25T16:05:00'), endState()), ['champion', 'bracket', 'thanks']);
+  });
+});
+
+// ================================================================ own-gear slide (SPEC v6 §0b.6)
+describe('gear slide (own mouse, keyboard, headset)', () => {
+  const after = (list, id) => list[list.indexOf(id) + 1];
+
+  test('id, label and place in SLIDE_IDS (right after req)', () => {
+    assert.equal(SLIDE_LABEL.gear, 'Өөрийн хэрэгсэл');
+    assert.equal(SLIDE_IDS.indexOf('gear'), SLIDE_IDS.indexOf('req') + 1);
+  });
+
+  test('reg: once, right after req and before teachers — live and static, before and after the draw', () => {
+    const rows = [[regState(), '2026-10-19T08:00:00'], [regState(), '2026-10-22T10:00:00'],
+      [regState({ draw: 'published' }), '2026-10-22T17:30:00'], [regState({ draw: 'published' }), '2026-10-23T23:59:58']];
+    for (const [s, t] of rows) {
+      for (const live of [true, false]) {
+        const list = slidesFor(at(t), s, { live });
+        assert.equal(list.filter((id) => id === 'gear').length, 1, `${t} live=${live}`);
+        assert.equal(list[list.indexOf('req') + 1], 'gear', `${t} live=${live}`);
+        assert.equal(after(list, 'gear'), 'teachers', `${t} live=${live}`);
+      }
+    }
+  });
+
+  test('closed: once, right after rules and before watch — with and without groups', () => {
+    const rows = [[makeState({ drawStatus: 'none' }), '2026-10-24T02:00:00'], [makeState(), '2026-10-24T05:00:00'],
+      [makeState(), '2026-10-24T06:59:59'], [regState({ settings: { registration_open: false } }), '2026-10-21T10:00:00']];
+    for (const [s, t] of rows) {
+      for (const live of [true, false]) {
+        const list = slidesFor(at(t), s, { live });
+        assert.equal(list.filter((id) => id === 'gear').length, 1, `${t} live=${live}`);
+        assert.equal(list[list.indexOf('rules') + 1], 'gear', `${t} live=${live}`);
+        assert.equal(after(list, 'gear'), 'watch', `${t} live=${live}`);
+      }
+    }
+  });
+
+  test('event days, the night and after the event: no gear slide (the rest of the API is unchanged)', () => {
+    const s = makeState();
+    for (const t of ['2026-10-24T07:00:00', '2026-10-24T12:00:00', '2026-10-24T20:00:00', '2026-10-25T11:00:00', '2026-10-25T18:00:00']) {
+      for (const live of [true, false]) assert.ok(!slidesFor(at(t), s, { live }).includes('gear'), `${t} live=${live}`);
+    }
+    assert.ok(!slidesFor(at('2026-10-25T16:05:00'), endState()).includes('gear'));
+    // dropping 'gear' gives back the v5 lists exactly
+    assert.deepEqual(REG.filter((id) => id !== 'gear'), ['hero', 'race', 'prize', 'join', 'fee', 'req', 'teachers', 'format', 'dates']);
+    assert.deepEqual(CLOSED.filter((id) => id !== 'gear'), ['kickoff', 'day1', 'day2', 'prize', 'rules', 'watch']);
   });
 });
 
@@ -450,7 +497,7 @@ describe('10.19 – 10.26 sweep', () => {
     reg: regState(), regDrawn: regState({ draw: 'published' }), event: makeState(), ended: endState(), none: null,
   };
 
-  test('slides: known ids with labels, static = live minus race/live, no slide twice in a row, all 20 reachable', () => {
+  test('slides: known ids with labels, static = live minus race/live, no slide twice in a row, all 21 reachable', () => {
     const seen = new Set();
     for (const [name, s] of Object.entries(states)) {
       for (const t of marks) {
@@ -641,6 +688,13 @@ const FORBIDDEN = [
   ['removed award «Шударга тоглолт»', words('Шударга тоглолт')],
   ['removed award «Шилдэг тайлбарлагч»', words('Шилдэг тайлбарлагч')],
   ['stale SPEC wording', /wingman|\bMR8\b|сонгон\s+шалгаруулалт|олон\s+нийтэд\s+шууд\s+дамжуулахгүй|хувь\s+хүний\s+мэдээлэл\s+хамгаалах|зөвхөн\s+финалд\s+таарна|бэлэн\s+мөнгө,\s*skin|бүрэлдэхүүн\s+сугалаагаар|10\.16\s*\(Ба\)|10\.21\s*\(Лх\)\s*17:00/iu],
+  // SPEC v6 «REMOVED»: no committee, no accountant, no waiting room, LED screen instead of a projector
+  ['v6: accountant «нягтлан бодогч»', words('нягтлан бодогч')],
+  ['v6: committee «Хороо»', /хороо/iu],
+  ['v6: «мэдээлэл зүйн багш»', words('мэдээлэл зүйн багш')],
+  ['v6: waiting room «хүлээлгийн өрөө»', words('хүлээлгийн өрөө')],
+  ['v6: projector', /проектор|projector/iu],
+  ['unfilled placeholder', /\[\[?(?:Захирлын овог нэр|Сургалтын менежерийн нэр|Мэдээлэл зүйн багшийн нэр|Нийгмийн ажилтны нэр|Нягтлан бодогчийн нэр|Лабын тоот|Танхимын нэр|Өрөөний тоот|Хот, дүүрэг)\]\]?/u],
   // weapon-free HUD (plan §4): no crosshair / reticle, no weapon names
   ['crosshair / reticle', /cross[\s_-]?hairs?|reticles?/iu],
   ['AK-47', /\bAK(?:[-\s]?47)?\b/],
@@ -720,5 +774,46 @@ describe('text guard: screen sources', () => {
     const src = scanText('js/phase.js');
     assert.deepEqual([...src.matchAll(/\bimport\b[^'"]*['"]([^'"]+)['"]/g)].map((m) => m[1]), ['./event.js']);
     assert.deepEqual(src.match(/\b(?:document|window|globalThis|localStorage|sessionStorage|fetch|navigator|setTimeout|setInterval|Date\.now)\b|new Date\(\)/g), null);
+  });
+});
+
+// ================================================================ SPEC v6 copy on the screen
+describe('text guard: SPEC v6 people, places and own gear on the screen', () => {
+  const there = existsSync(join(DOCS, SCREEN_JS));
+  const skip = there ? false : `${SCREEN_JS} is not written yet`;
+  const has = (text, phrase) => countOf(text, phrase) > 0;
+
+  test('people and places come from config.js (STAFF, PLACES) — never typed into the screen sources', { skip }, () => {
+    const src = scanText(SCREEN_JS);
+    const imp = /import\s*\{([^}]*)\}\s*from\s*['"]\.\.\/config\.js['"]/.exec(src);
+    assert.ok(imp, 'screen.js imports from ../config.js');
+    for (const name of ['STAFF', 'PLACES']) assert.match(imp[1], new RegExp(`\\b${name}\\b`), name);
+    for (const rel of guardFiles()) {
+      if (!existsSync(join(DOCS, rel))) continue;
+      const text = scanText(rel);
+      const names = /Мөнгөншагай|Жаргал|Энхнаран|Бямбасамбуу|Б\.\s*Даваа|Мажигсүрэн|Windows\s+lab|Урлагийн\s+заал|60114971|94741053/giu;
+      assert.deepEqual(hits(text, names), [], `${rel}: hard-coded person / place / phone`);
+    }
+    for (const use of ['STAFF.organiser', 'PLACES.hall', 'PLACES.lab']) assert.ok(src.includes(use), use);
+  });
+
+  test('fee: paid to the organiser against a receipt (no accountant); teams wait in their classrooms', { skip }, () => {
+    const text = scanText(SCREEN_JS);
+    for (const phrase of ['Хураамжаа зохион байгуулагч ${STAFF.organiser}д', 'баримт ав', '${PLACES.lab}-ын үүдэнд', 'ангидаа хүлээ']) {
+      assert.ok(has(text, phrase), phrase);
+    }
+    assert.ok(has(text, '${PLACES.hall}ын LED дэлгэц'), 'spectators: the hall LED screen');
+  });
+
+  test('gear slide: headline, three icon cards (mouse, keyboard, headset) and the four rule lines', { skip }, () => {
+    const text = scanText(SCREEN_JS);
+    for (const phrase of ['Өөрийн хэрэгслээ', 'авчир!', "'Хулгана'", "'Гар'", "'Чихэвч'",
+      'USB-ээр шууд залгагдана', 'Программ суулгахгүй — тохиргоо төхөөрөмж дээрээ', 'Макро, скрипт хориотой',
+      'Нэр, ангиа шошголоод тоглолтын дараа авч яв']) {
+      assert.ok(has(text, phrase), phrase);
+    }
+    for (const ico of ['mouse', 'keyboard', 'headset']) assert.match(text, new RegExp(`\\b${ico}:\\s*\\[`), `ICONS.${ico}`);
+    assert.match(text, /\bgear:\s*\(\)\s*=>/, 'SLIDES.gear');
+    assert.match(scanText('css/screen.css'), /\.s-gear\b/, 'screen.css styles .s-gear');
   });
 });

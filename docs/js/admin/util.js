@@ -1,5 +1,5 @@
 // Админы цэвэр туслах функцууд. DOM ашиглахгүй — Node-оор тестлэх боломжтой.
-import { SITE_URL, TZ } from '../config.js';
+import { SITE_URL, TZ, STAFF } from '../config.js';
 import { EVENT_NAME, DATES, FEE } from '../event.js';
 
 /* ---------- CSV (UTF-8 BOM, formula-injection safe) ---------- */
@@ -78,17 +78,25 @@ export const siteLabel = () => SITE_URL.replace(/^https?:\/\//, '').replace(/\/$
 /** 120000 → '120 000 ₮' (no-break spaces, same as ui.mnt; kept here so this module stays DOM-free). */
 export function mntText(n) { return `${String(Math.round(Number(n) || 0)).replace(/\B(?=(\d{3})+(?!\d))/g, '\u00A0')}\u00A0₮`; }
 
-/** Team fee reminder for class teams (SPEC v5 §2a); the teachers' team pays no fee. */
-export const feeLine = () => `Багийн хураамж ${mntText(FEE.team)} — ахлагч ${shortDateTime(DATES.fee_due_at)} хүртэл сургуулийн нягтлан бодогчид төлж, баримт авна.`;
+/**
+ * Team fee reminder for class teams (SPEC v5 §2a, v6 §0b.3): paid to the organiser against a receipt
+ * (cash or transfer to the school account); homeroom teachers do not collect money. The teachers' team pays no fee.
+ */
+export const feeLine = () => `Багийн хураамж ${mntText(FEE.team)} — ахлагч эсвэл ангийн төлөөлөгч ${shortDateTime(DATES.fee_due_at)} хүртэл `
+  + `зохион байгуулагч ${STAFF.organiser}д бэлнээр эсвэл сургуулийн дансаар төлж, баримт авна.`;
+
+/** Own-gear line (SPEC v6 §0b.6), voluntary: class teams label gear with name + class, the teachers' team with the name. */
+export const gearLine = (teachers = false) => 'Өөрийн хулгана, гар, чихэвч, хулганы дэвсгэрээ авчирч болно (заавал биш): '
+  + `зөвхөн USB, программ суулгахгүй, макро хориотой; ${teachers ? 'нэрээ' : 'нэр, ангиа'} шошголно.`;
 
 /** Message the organiser forwards to a homeroom teacher → class chat (link only, no PIN). */
 export function classLinkMessage(item, deadline) {
   if (item.is_teachers) {
     return `«${EVENT_NAME}» — Багш нарын багийн бүртгэл: ${classLink(item.token)}\n`
-      + `Хугацаа: ${deadline}. Холбоосыг зөвхөн багийн гишүүдэд хуваалцана уу.`;
+      + `Хугацаа: ${deadline}. Холбоосыг зөвхөн багийн гишүүдэд хуваалцана уу.\n${gearLine(true)}`;
   }
   return `«${EVENT_NAME}» — ${item.name} багийн бүртгэл: ${classLink(item.token)}\n`
-    + `Хугацаа: ${deadline}. Холбоосыг зөвхөн ангийн чатад хуваалцаарай.\n${feeLine()}`;
+    + `Хугацаа: ${deadline}. Холбоосыг зөвхөн ангийн чатад хуваалцаарай.\n${feeLine()}\n${gearLine()}`;
 }
 /** Teacher-only PIN line (sent separately from the link). The teachers' team PIN goes to its captain. */
 export function pinMessage(item) {
@@ -171,13 +179,13 @@ export function manualGroupsError(groups, teams) {
 }
 
 /* ---------- consent aliases ---------- */
-/** Alias for a player shown on stream/projector instead of the Steam name: «8а-Тоглогч3». */
+/** Alias for a player shown on the stream / the hall LED screen instead of the Steam name: «8а-Тоглогч3». */
 export function aliasFor(team, slot) { return `${team.is_teachers ? 'Багш' : team.name}-Тоглогч${slot}`; }
-/** Row 3а (projector) or 3б (online) not «Тийм» (false or not marked) → needs an alias. */
+/** Row 3а (hall LED screen) or 3б (online) not «Тийм» (false or not marked) → needs an alias. */
 export const needsAlias = (p) => p.consent_3a !== true || p.consent_3b !== true;
 export const playerId = (p) => (p.id != null ? p.id : p.player_id);
 /**
- * Name shown in the game feed (MatchZy → hall projector AND stream): the Steam name only when BOTH rows 3а and 3б
+ * Name shown in the game feed (MatchZy → hall LED screen AND stream): the Steam name only when BOTH rows 3а and 3б
  * are «Тийм»; otherwise the alias (or the automatic «8а-Тоглогч3»). Stricter than the SQL export (3б only).
  */
 export function streamName(p, team) {

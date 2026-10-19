@@ -1,8 +1,9 @@
-// «Сугалаа» — проекторт зориулсан бүтэн дэлгэцийн хуудас.
+// «Сугалаа» — Windows lab-ын том дэлгэцэнд зориулсан бүтэн дэлгэцийн хуудас (техникийн зөвлөгөөн, SPEC v6 §0b.4).
 // Төлөв: none → committed (commit hash, «Ахлагч нар тоогоо бичиж байна») → computed/published
 // (сагс сагсаар 4 хэсэгт үзүүлнэ; Space/товшилт/автомат) → «Шалгах» (logic.computeDraw-аар дахин тооцоолно).
 import { h, clear, fmtCountdown } from '../ui.js';
 import { store } from '../store.js';
+import { PLACES } from '../config.js';
 import { TEAMS, GROUPS, GROUP_LABEL, EVENT_NAME, DRAW_AT } from '../event.js';
 import { computeDraw, sha256Hex, drawInputsString } from '../logic.js';
 import { makeClock, nameByCode, tms, safe } from './schedule.js';
@@ -114,7 +115,7 @@ export default async function render(root, params = {}) {
     const voided = lastReason(d, (s) => s.includes('void'));
     main.appendChild(h('section', { class: 'dr-hero' },
       h('h1', {}, 'Сугалаа 10.22 (Пүрэв) 16:00'),
-      h('p', { class: 'dr-lead' }, 'Техникийн зөвлөгөөнөөр, бүх ахлагч, менежерийн өмнө нээлттэй болно.'),
+      h('p', { class: 'dr-lead' }, `${PLACES.lab}-д техникийн зөвлөгөөнөөр, бүх ахлагч, менежерийн өмнө нээлттэй болно.`),
       h('p', { class: 'dr-cd' }, h('span', {}, 'Эхлэх хүртэл '), ui.cd = h('b', {}, '')),
       voided ? h('p', { class: 'dr-void' }, `Өмнөх сугалааг хүчингүй болгосон. Шалтгаан: ${voided}`) : null,
       howSteps(0)));

@@ -1,11 +1,13 @@
 // 3. Зөвшөөрөл — 72 мөрийн хүснэгт: 05 / 3а / 3б / 3в тэмдэглэгээ, хоч нэр, автомат хоч нэр.
 import { h, toast } from '../ui.js';
 import { btn, section, chip, confirmDialog } from './core.js';
-import { needsAlias, autoAliasPlan, playerId } from './util.js';
+import { needsAlias, autoAliasPlan, playerId, shortDateTime } from './util.js';
+import { STAFF, PLACES } from '../config.js';
+import { DATES } from '../event.js';
 
 const COLS = [
   ['consent_paper', '05', 'Эцэг эхийн зөвшөөрөл (маягт 05, 05б)'],
-  ['consent_3a', '3а', 'Танхимын проектор'],
+  ['consent_3a', '3а', `${PLACES.hall}ын LED дэлгэц`],
   ['consent_3b', '3б', 'Онлайн шууд дамжуулалт'],
   ['consent_3v', '3в', 'Тайлбарлагчийн дуу'],
 ];
@@ -84,7 +86,8 @@ export function render(panel, ctx, ui) {
   }, 'gold');
 
   panel.appendChild(section('Зөвшөөрөл',
-    h('p', { class: 'muted small' }, 'Цаасан маягтыг шалгаад тэмдэглэнэ үү. 05 — маягт 05, 05б ирсэн; 3а — танхимын проектор; 3б — онлайн дамжуулалт; 3в — тайлбарлагчийн дуу. Тэмдэглэх бүрт шууд хадгална.'),
+    h('p', { class: 'muted small' }, `Цаасан маягтыг шалгаад тэмдэглэнэ үү. 05 — маягт 05, 05б ирсэн; 3а — ${PLACES.hall}ын LED дэлгэц; 3б — онлайн дамжуулалт; 3в — тайлбарлагчийн дуу. Тэмдэглэх бүрт шууд хадгална.`),
+    h('p', { class: 'muted small' }, `Зөвшөөрлийг анги удирдсан багш нар ${shortDateTime(DATES.consent_deadline_at)} хүртэл хүлээн авч, нийгмийн ажилтан ${STAFF.social}д хүлээлгэн өгнө; тэмдэглэгээг нийгмийн ажилтан эсвэл зохион байгуулагч ${STAFF.organiser} хийнэ.`),
     h('p', { class: 'muted small' }, '3а эсвэл 3б «Тийм» биш тоглогч дэлгэц, дамжуулалтад зөвхөн хоч нэрээр харагдана.'),
     counts,
     h('div', { class: 'row adm-mt' }, teamSel, showSel, h('span', { class: 'spacer' }), autoBtn, progress)));

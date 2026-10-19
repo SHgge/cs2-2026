@@ -26,7 +26,7 @@ export const DATES = deepFreeze({
   reg_closes_at: '2026-10-23T23:59:59+08:00',        // online registration closes (class QR + PIN)
   roster_freeze_at: '2026-10-23T23:59:59+08:00',     // roster freeze = registration close
   consent_deadline_at: '2026-10-23T17:00:00+08:00',  // paper consent 05 + 05б, paper form 04
-  fee_due_at: '2026-10-23T17:00:00+08:00',           // team fee to the school accountant
+  fee_due_at: '2026-10-23T17:00:00+08:00',           // team fee to the organiser (receipt)
   drill_from: '2026-10-19T00:00:00+08:00',           // Steam QR login drills 10.19–10.23
   drill_to: '2026-10-23T18:00:00+08:00',
   draw_commit_on: '2026-10-21T00:00:00+08:00',       // commit (SHA-256) published on the portal
