@@ -8,6 +8,7 @@ Octolearn London School-ийн 8–12-р ангийн Counter-Strike 2 тэмц�
 - Шагналын сан 1 200 000 ₮ (600 000 / 360 000 / 240 000 ₮) + MVP 100 000 ₮; бүх хураамж шагналд зарцуулагдана.
 
 - Сайт: **https://shgge.github.io/cs2-2026/**
+- Сургуулийн гол (лобби) дэлгэц: **https://shgge.github.io/cs2-2026/#/screen** — бүтэн дэлгэцийн урам зориг өгөх постер; тоолуур, бүртгэлийн явц, сугалаа, тэмцээний үеийн оноо өөрөө шинэчлэгдэнэ. USB-ээр тоглуулах MP4/PNG: төслийн `14_Delgets/` хавтас (`_build/screen_export/export.mjs`).
 - Статик сайт: `docs/` (GitHub Pages, build алхамгүй, цэвэр HTML/CSS/ES modules).
 - Backend: Supabase-ийн тусгаарласан `cs2` схем; браузер зөвхөн `public.cs2_*` RPC функцуудыг дуудна.
 
