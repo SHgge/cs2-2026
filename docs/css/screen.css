@@ -300,21 +300,21 @@ html.scr-on body { background: #000; }
 .req-drill .scr-ico { width: 52px; height: 52px; }
 .req-drill b { font-weight: 700; text-transform: uppercase; }
 
-/* ---------- gear (өөрийн хулгана, гар, чихэвч — SPEC v6 §0b.6) ---------- */
+/* ---------- gear (өөрийн хулгана, хулганы дэвсгэр, гар, чихэвч — SPEC v6 §0b.6) ---------- */
 .s-gear { gap: 18px; }
 .scr .gear-h { font-size: 90px; white-space: nowrap; }
-.gear-cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px; }
+.gear-cards { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 18px; }
 .gcard {
-  display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 20px 16px 18px; text-align: center; min-width: 0;
+  display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 18px 12px 16px; text-align: center; min-width: 0;
   background: var(--cell); border: 2px solid var(--line); border-top: 6px solid var(--ct);
 }
 .gcard-ico {
-  width: 124px; height: 124px; display: grid; place-items: center; color: var(--ct);
+  width: 112px; height: 112px; display: grid; place-items: center; color: var(--ct);
   background: rgba(90, 169, 240, .12); border: 3px solid rgba(90, 169, 240, .55);
 }
-.gcard-ico .scr-ico { width: 84px; height: 84px; stroke-width: 1.7; }
-.gcard b { font-size: 60px; line-height: 1; text-transform: uppercase; }
-.gcard span { font-size: 32px; line-height: 1.1; color: var(--amber2); white-space: nowrap; }
+.gcard-ico .scr-ico { width: 76px; height: 76px; stroke-width: 1.7; }
+.gcard b { font-size: 54px; line-height: 1; text-transform: uppercase; }
+.gcard span { font-size: 30px; line-height: 1.1; color: var(--amber2); text-wrap: balance; }
 .gear-rules { flex: 1; min-height: 0; display: grid; grid-template-columns: 1fr 1fr; grid-auto-rows: 1fr; gap: 14px; }
 .grule {
   display: flex; align-items: center; gap: 18px; padding: 8px 22px; min-width: 0;
@@ -384,8 +384,9 @@ html.scr-on body { background: #000; }
   color: #fff; background: var(--gc, var(--line2)); box-shadow: 0 0 30px color-mix(in srgb, var(--gc, #fff) 45%, transparent);
 }
 .grp-b { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-.grp-st { font-size: 28px; color: var(--muted); text-transform: uppercase; letter-spacing: 2px; }
-.grp-t { font-size: 44px; line-height: 1.12; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.grp-st { display: flex; align-items: center; gap: 12px; margin-bottom: 6px; font-size: 28px; line-height: 1.1; color: var(--muted); text-transform: uppercase; letter-spacing: 2px; white-space: nowrap; }
+.grp-t { font-size: 50px; font-weight: 600; line-height: 1.1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.grp.ph .grp-t { color: var(--muted); font-weight: 400; }
 
 /* ---------- dates ---------- */
 .dl { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 14px; }
@@ -485,7 +486,7 @@ html.scr-on body { background: #000; }
 /* ---------- watch ---------- */
 .watch { flex: 1; min-height: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
 .wcard {
-  display: flex; flex-direction: column; justify-content: flex-start; gap: 14px; padding: 48px 34px 30px; background: var(--cell);
+  display: flex; flex-direction: column; justify-content: center; gap: 14px; padding: 34px; background: var(--cell);
   border: 2px solid var(--line); border-top: 6px solid var(--ct);
 }
 .wcard .scr-ico { width: 112px; height: 112px; color: var(--ct); margin-bottom: 8px; }
@@ -582,6 +583,76 @@ html.scr-on body { background: #000; }
 .thx .scr-h { font-size: 170px; color: var(--amber); text-shadow: 0 0 60px rgba(245, 165, 36, .4); }
 .thx-url { display: flex; align-items: center; gap: 14px; font-size: 44px; color: var(--muted); }
 .thx-url .scr-ico { width: 44px; height: 44px; color: var(--amber); }
+
+/* ---------- prep: 1-р өдрийн хуваарь (ангийн нэрээр) ---------- */
+.s-gschedule { gap: 14px; }
+.gs-open {
+  display: flex; align-items: center; gap: 16px; padding: 8px 24px; font-size: 40px; line-height: 1.1; white-space: nowrap;
+  background: var(--cell); border: 2px solid var(--line); border-left: 6px solid var(--amber);
+}
+.gs-open .scr-ico { width: 44px; height: 44px; color: var(--amber); }
+.gs-open b { color: var(--amber); }
+.gs-open i { color: var(--line2); }
+.gs .sch-h span { white-space: nowrap; }
+.gs .sch-t { font-size: 46px; }
+.gs .sm { font-size: 44px; }
+.gs .sch-r.brk { flex: .72; }
+
+/* ---------- prep: тоглогчийн 10 дүрэм ---------- */
+.s-rules10 { gap: 18px; }
+.r10 { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 6px; }
+.r10-i {
+  flex: 1; min-height: 0; display: flex; align-items: center; gap: 18px; padding-right: 22px;
+  background: var(--cell); border: 2px solid var(--line);
+}
+.r10-i:nth-child(even) { background: rgba(21, 28, 39, .78); }
+.r10-n {
+  flex: none; align-self: stretch; width: 82px; display: grid; place-items: center; padding-right: 10px; font-size: 34px; line-height: 1;
+  color: var(--ink); background: var(--amber); clip-path: polygon(0 0, 100% 0, calc(100% - 14px) 100%, 0 100%);
+}
+.r10-i > .scr-ico { width: 40px; height: 40px; color: var(--amber2); }
+.r10-t { min-width: 0; font-size: 40px; line-height: 1.1; white-space: nowrap; color: #D5DDE6; }
+.r10-t b { color: var(--text); }
+.r10-i.hot { border-color: rgba(255, 90, 78, .55); background: linear-gradient(90deg, rgba(255, 90, 78, .16), rgba(7, 9, 13, .62) 70%); }
+.r10-i.hot .r10-n { background: var(--hot); color: #fff; }
+.r10-i.hot > .scr-ico { color: var(--hot); }
+
+/* ---------- prep: анги удирдсан багш (багийн менежер) ---------- */
+.s-managers { gap: 14px; }
+.mgr { flex: 1; min-height: 0; display: grid; grid-template-columns: 1fr 1fr; grid-auto-rows: 1fr; gap: 14px; }
+.mgr-c {
+  min-width: 0; display: flex; flex-direction: column; justify-content: center; gap: 6px; padding: 8px 24px 10px 20px;
+  background: var(--cell); border: 2px solid var(--line); border-left: 6px solid var(--ct);
+}
+.mgr-c:last-child { border-left-color: var(--amber); }
+.mgr-h { display: flex; align-items: center; gap: 12px; color: var(--amber); white-space: nowrap; }
+.mgr-h .scr-ico { width: 40px; height: 40px; color: var(--ct); }
+.mgr-h b { font-size: 40px; line-height: 1.1; }
+.mgr-c > span { font-size: 40px; line-height: 1.12; text-wrap: balance; }
+
+/* ---------- prep: амжилт хүсье ---------- */
+.s-goodluck { justify-content: space-between; gap: 16px; }
+.gl-top { display: flex; align-items: center; justify-content: space-between; gap: 20px; }
+.gl-copy { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.scr .gl-h { font-size: 128px; line-height: .92; color: var(--amber); white-space: nowrap; text-shadow: 0 0 46px rgba(245, 165, 36, .4), 0 6px 28px rgba(0, 0, 0, .55); }
+.gl-sub { font-size: 64px; font-weight: 700; line-height: 1; text-transform: uppercase; white-space: nowrap; }
+.gl-sub em { color: var(--amber); }
+.gl-art { position: relative; flex: none; width: 220px; height: 236px; display: grid; place-items: center; }
+.gl-art .scr-trophy { width: 196px; }
+.gl-art .hero-rays { width: 400px; height: 400px; }
+.gl-teams { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 12px; }
+.gl-t {
+  position: relative; min-width: 0; height: 84px; display: flex; align-items: center; justify-content: center;
+  background: var(--cell); border: 2px solid var(--line); border-top: 6px solid var(--gc, var(--line2));
+}
+.gl-t.teach { grid-column: span 3; }
+.gl-t b { font-size: 52px; line-height: 1; white-space: nowrap; }
+.gl-g { position: absolute; right: 8px; top: 4px; font-size: 28px; font-weight: 700; line-height: 1; color: var(--gc, var(--muted)); filter: brightness(1.35); }
+.gl-motto { display: flex; align-items: baseline; justify-content: center; gap: 20px; font-size: 48px; line-height: 1.1; text-transform: uppercase; white-space: nowrap; }
+.gl-motto i { color: var(--amber); }
+.gl-open { display: flex; align-items: center; justify-content: center; gap: 14px; font-size: 40px; line-height: 1.1; white-space: nowrap; }
+.gl-open .scr-ico { width: 44px; height: 44px; color: var(--amber); }
+.gl-open b { color: var(--amber); }
 
 /* ---------- баруун тал: тоолуур ---------- */
 .scr-rail { position: absolute; left: 1320px; top: 144px; width: 560px; height: 840px; }

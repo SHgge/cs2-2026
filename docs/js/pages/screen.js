@@ -10,7 +10,7 @@ import { store } from '../store.js';
 // SPEC v6: хүн (зохион байгуулагч), байршлын нэрийг (Windows lab, Урлагийн заал) зөвхөн config.js-ийн STAFF, PLACES-ээс авна.
 import { BUILD, SITE_URL, SCHOOL, FB_PAGE, CONTACT_PHONES, STAFF, PLACES } from '../config.js';
 import {
-  PRIZES, FEE, GROUPS, GROUP_LABEL, GROUP_COLOR, STATION_LABEL, DATES, DRAW_AT, DAY_INFO, MATCHES, CHAMPION_TITLE,
+  PRIZES, FEE, GROUPS, GROUP_LABEL, GROUP_COLOR, STATION_LABEL, DATES, DRAW_AT, DAY_INFO, MATCHES, CHAMPION_TITLE, TEAMS,
 } from '../event.js';
 import {
   SLIDE_IDS, SLIDE_LABEL, TIMES, settingsOf, drawShown, regSummary, screenPhase, wavesOf, slidesFor, countdownFor,
@@ -35,9 +35,11 @@ const STATE_WAIT_MS = 8000;
 const VALVE_LINE = 'Valve-ийн албан ёсны тэмцээн биш';
 const SITE_SHORT = SITE_URL.replace(/^https?:\/\//, '').replace(/\/+$/, '');
 const GROUP_STATION = { A: 'A', V: 'A', B: 'B', G: 'B' };
+/** Станцын компьютерууд (SPEC §6: А = PC 01–10, Б = PC 11–20). */
+const STATION_PCS = { A: 'PC 01–10', B: 'PC 11–20' };
 const GEN = { 1: 'ийн', 2: 'ын', 3: 'ын', 4: 'ийн' };
 /** Өгөгдөл өөрчлөгдөхөд дахин зурах слайдууд. */
-const DATA_SLIDES = new Set(['race', 'groups', 'dates', 'live', 'standings', 'bracket', 'champion', 'day1', 'day2']);
+const DATA_SLIDES = new Set(['race', 'groups', 'dates', 'live', 'standings', 'bracket', 'champion', 'day1', 'day2', 'gschedule', 'goodluck']);
 
 // ---------- жижиг туслахууд ----------
 const fmtNum = (n) => String(Math.round(Number(n) || 0)).replace(/\B(?=(\d{3})+(?!\d))/g, NBSP);
@@ -62,6 +64,47 @@ function onScreenRoute() { return (location.hash || '').replace(/^#\/?/, '').spl
 function vars(el, map) { for (const [k, v] of Object.entries(map)) el.style.setProperty(k, v); return el; }
 /** Element.append() null-ийг «null» текст болгодог тул шүүнэ. */
 function add(el, ...kids) { for (const c of kids.flat(Infinity)) if (c != null && c !== false) el.append(c); return el; }
+
+/** Үг холбогч (U+2060): «lab-ын» зураасны дараа мөр таслахгүй. */
+const WJ = String.fromCharCode(0x2060);
+/** Газрын нэр мөрөнд хуваагдахгүй («Windows lab»). */
+const nbPlace = (s) => String(s).replace(/ /g, NBSP);
+
+/** 1-р өдрийн тогтмол цаг (DAY_INFO.d1): 'Бүртгэл' → '08:30'. */
+const d1At = (label, def) => ((DAY_INFO.d1 || []).find(([, l]) => l === label) || [def])[0];
+const D1_DATE = TIMES.day1Start.slice(0, 10);
+const D1_REG = `${D1_DATE}T${d1At('Бүртгэл', '08:30')}:00+08:00`;
+const D1_OPEN = `${D1_DATE}T${d1At('Нээлт', '09:00')}:00+08:00`;
+
+/**
+ * Тоглогчийн 10 дүрэм (prep): маягт 06 «Тоглолтын дүрэм ба ёс зүйн код», удирдамж 02-ын 5.4, 7.10, 7.12, 7.16, 8.1–8.2,
+ * 9.3-аас; мөр бүр ≤ 9 үг: [дүрс, тод эхлэл, үргэлжлэл]. Өөрийн хэрэгслийн дэлгэрэнгүй — 'gear' слайдад.
+ */
+const RULES10 = [
+  ['clock', '15 минутын өмнө ир:', '10 минутаас илүү хоцорвол 13:0'],
+  ['users', 'Өөрийн Steam бүртгэлээр', 'Steam Mobile QR-аар нэвтэр'],
+  ['tag', 'Steam нэр:', '«8а | Нэр» хэлбэртэй, овоггүй'],
+  ['phone', 'Утсаа шүүгчид хадгалуул', '(Steam-д нэвтэрсний дараа)'],
+  ['ban', 'Шударга тогло:', 'чит, макро, скрипт хориотой'],
+  ['star', 'Бие биеэ хүндэл:', 'хараал, доромжлол хориотой'],
+  ['check', 'Шүүгчийн шийдвэрийг дага;', 'гомдлыг зөвхөн ахлагч гаргана'],
+  ['doc', 'Хоол, ундаа', `${PLACES.lab}-д оруулахгүй`],
+  ['plug', 'Дуусмагц Steam-ээс гарч,', 'хэрэгслээ авч яв'],
+  ['hourglass', '15 минут дэлгэцгүй амар:', 'тоглолт бүрийн дараа'],
+];
+
+/**
+ * Анги удирдсан багш = багийн менежер (удирдамж 02-ын 4.8, 6.3, 6.8, 7.10, 9.1; SPEC §8) — 6 мөр: [дүрс, хэзээ, үүрэг].
+ * Зөвшөөрлийг нийгмийн ажилтанд өгнө (6.3); хураамжийг ахлагч зохион байгуулагчид төлнө, анги удирдсан багш хураахгүй (4.8, 6.8).
+ */
+const MANAGER_DUTIES = [
+  ['doc', `${dayTime(DATES.consent_deadline_at)} хүртэл`, 'Зөвшөөрлийг цуглуулж, нийгмийн ажилтанд өгнө'],
+  ['calendar', dayTime(D1_REG), 'Багтайгаа бүртгэлд ирнэ (бэйж, зөвшөөрөл)'],
+  ['clock', 'Ээлжээс 15 минутын өмнө', `Багаа ангиас ${nbPlace(PLACES.lab)}-${WJ}ын үүдэнд авчирна`],
+  ['users', 'Өдөржин', 'Ирц, сахилга бат, сайн сайхан байдлыг хариуцна'],
+  ['phone', 'Менежерүүдийн чат', 'Хуваарийн өөрчлөлт, дараагийн хосыг хянана'],
+  ['tag', 'Хураамж', 'Ахлагч зохион байгуулагчид төлнө, багш хураахгүй'],
+];
 
 function readOptions(q) {
   const on = (v) => v === '1' || v === 'true' || v === 'yes';
@@ -116,8 +159,9 @@ const ICONS = {
   doc: ['M6 2.5h8l4 4v15H6z', 'M14 2.5v4h4', 'M9 12h6', 'M9 16h6'],
   ban: [{ c: [12, 12, 9] }, 'M5.7 5.7l12.6 12.6'],
   hourglass: ['M6.5 3h11', 'M6.5 21h11', 'M8 3c0 4.5 8 4.5 8 9s-8 4.5-8 9', 'M16 3c0 4.5-8 4.5-8 9s8 4.5 8 9'],
-  // өөрийн хэрэгсэл (gear слайд): хулгана, гар, чихэвч (микрофонтой); USB залгуур, санах ойн чип, шошго
+  // өөрийн хэрэгсэл (gear слайд): хулгана, хулганы дэвсгэр, гар, чихэвч (микрофонтой); USB залгуур, санах ойн чип, шошго
   mouse: [{ r: [5.5, 2.5, 13, 19, 6.5] }, 'M12 2.5v6.5', 'M5.5 9h13'],
+  pad: [{ r: [2, 6.5, 20, 13, 2.5] }, { r: [12.5, 8.8, 6, 8.7, 3] }, 'M15.5 8.8v3.3', 'M12.5 12.1h6', 'M5 16.5h4.5'],
   keyboard: [{ r: [2, 5.5, 20, 13, 2] }, 'M6 9.5h.01', 'M10 9.5h.01', 'M14 9.5h.01', 'M18 9.5h.01', 'M8 12.5h.01', 'M12 12.5h.01',
     'M16 12.5h.01', 'M7.5 15.5h9'],
   headset: ['M4 14v-2a8 8 0 0 1 16 0v2', { r: [2.5, 13.5, 5, 7, 1.8] }, { r: [16.5, 13.5, 5, 7, 1.8] },
@@ -352,14 +396,22 @@ export default async function render(root, params = {}) {
       h('div', { class: 'segs' }, segs));
   }
 
+  /** Хэсгийн карт: үсэг, станцын хавтан (А/Б, PC), 3 анги суудлын дарааллаар (А1 = 1-р сагс …). */
   function groupBox(g, drawn) {
     const codes = drawn && state.draw.groups && Array.isArray(state.draw.groups[g]) ? state.draw.groups[g] : [];
     const names = [1, 2, 3].map((s) => (codes[s - 1] ? classUp(nameByCode(state, codes[s - 1])) : `${GROUP_LABEL[g]}${s}`));
-    return vars(h('div', { class: 'grp' },
+    const st = GROUP_STATION[g];
+    return vars(h('div', { class: `grp${codes.length ? '' : ' ph'}` },
       h('div', { class: 'grp-l' }, GROUP_LABEL[g]),
       h('div', { class: 'grp-b' },
-        h('div', { class: 'grp-st' }, `${GROUP_LABEL[g]} хэсэг · ${STATION_LABEL[GROUP_STATION[g]]}`),
+        h('div', { class: 'grp-st' }, sitePlate(st, 'xs'), h('span', {}, `${STATION_LABEL[st]} · ${STATION_PCS[st]}`)),
         names.map((n) => h('div', { class: 'grp-t' }, n)))), { '--gc': GROUP_COLOR[g] });
+  }
+
+  /** Анги → хэсгийн түлхүүр (сугалаа нийтлэгдсэн бол). */
+  function groupOfCode(code) {
+    if (!drawShown(state)) return null;
+    return GROUPS.find((g) => Array.isArray(state.draw.groups[g]) && state.draw.groups[g].includes(code)) || null;
   }
 
   /** Хуваарийн нүд. stacked = 2 мөр (хасагдах шат: нэр урт, мөр өндөр). */
@@ -495,11 +547,23 @@ export default async function render(root, params = {}) {
 
   function tickerDefaults(p) {
     const s = settingsOf(state);
+    const now = clock.now();
     const fb = `Шууд дамжуулалт: «${FB_PAGE}» Facebook хуудас`;
     // SPEC v6 §0b.4: баг ангидаа хүлээж, менежер (анги удирдсан багш) лабын үүдэнд авчирна.
     const come = `Багууд ангидаа хүлээж, тоглолтоос 15 минутын өмнө менежертэйгээ ${PLACES.lab}-ын үүдэнд ирнэ`;
-    const gear = 'Өөрийн хулгана, гар, чихэвчээ авчирч болно: зөвхөн USB, программ суулгахгүй, макро хориотой';
+    const gear = 'Өөрийн хулгана, гар, чихэвч, хулганы дэвсгэрээ авчирч болно: зөвхөн USB, программ суулгахгүй, макро хориотой';
     switch (p) {
+      // Сугалааны дараа: хугацаа өнгөрсөн мөр (хураамж, бүрэлдэхүүн) өөрөө алга болно (tick() дахин шалгана).
+      case 'prep': return [
+        `Хэсгүүд тодорлоо! Хэсэг, хуваарь: ${SITE_SHORT}`,
+        now < tms(s.fee) ? `Хураамжаа зохион байгуулагч ${STAFF.organiser}д, зөвшөөрлөө багшдаа ${dayTime(s.fee)} хүртэл өгөөрэй` : null,
+        now < tms(s.freeze) ? `Бүрэлдэхүүн ${dayTime(s.freeze)}-д царцана` : null,
+        `Тоглогчид ${dayTime(D1_REG)}-д ирж бүртгүүлнэ. Нээлт ${fmtTime(D1_OPEN)}-д ${PLACES.hall}д`,
+        come,
+        `Утсандаа Steam${NBSP}Mobile апп бэлэн байлгаарай: QR-аар нэвтэрнэ`,
+        gear,
+        fb,
+      ].filter(Boolean);
       case 'reg': return [
         `Онлайн бүртгэл ${dayTime(s.reg)} хүртэл. Ангиа бүртгүүлээрэй!`,
         `Хураамжаа зохион байгуулагч ${STAFF.organiser}д, зөвшөөрлөө багшдаа ${dayTime(DATES.fee_due_at)} хүртэл өгөөрэй`,
@@ -522,7 +586,7 @@ export default async function render(root, params = {}) {
   }
 
   const qrCaption = (p) => (p === 'reg' ? 'Дүрэм, маягт, хуваарь'
-    : p === 'closed' ? 'Хэсэг, хуваарь, дүрэм'
+    : p === 'closed' || p === 'prep' ? 'Хэсэг, хуваарь, дүрэм'
       : p === 'over' ? 'Дүн, хасагдах шат' : 'Хуваарь, оноо шууд');
 
   const SLIDES = {
@@ -600,7 +664,8 @@ export default async function render(root, params = {}) {
       kick('Заавал биш · сургуулийн хэрэгсэл бэлэн байна'),
       title(['Өөрийн хэрэгслээ ', h('em', {}, 'авчир!')], 'gear-h'),
       h('div', { class: 'gear-cards' },
-        [['mouse', 'Хулгана', 'дэвсгэртэйгээ'], ['keyboard', 'Гар', 'утасгүй бол цэнэглэ'], ['headset', 'Чихэвч', 'микрофонтой бол сайн']]
+        [['mouse', 'Хулгана', 'утастай нь найдвартай'], ['pad', 'Дэвсгэр', 'хулганы pad'], ['keyboard', 'Гар', 'утасгүй бол цэнэглэ'],
+          ['headset', 'Чихэвч', 'микрофонтой бол сайн']]
           .map(([ico, name, sub]) => h('div', { class: 'gcard' },
             h('div', { class: 'gcard-ico' }, icon(ico)), h('b', {}, name), h('span', {}, sub)))),
       h('div', { class: 'gear-rules' },
@@ -744,6 +809,71 @@ export default async function render(root, params = {}) {
         title('Баярлалаа!', 'scr-h-xl'),
         h('p', { class: 'scr-lead' }, 'Тоглогч, багш, шүүгч, үзэгч бүхэнд'),
         h('div', { class: 'thx-url' }, icon('star'), `Дүн: ${SITE_SHORT}`))),
+
+    // ---------- prep (сугалаа нийтлэгдсэнээс 10.24 07:00 хүртэл) ----------
+    // 1-р өдрийн хуваарь ангийн нэрээр (сугалааны суудлаас), бүртгэл ба нээлтийн мөр, үдийн цай.
+    gschedule: () => {
+      const now = clock.now();
+      const byNo = new Map(mergedMatches(state).map((m) => [m.no, m]));
+      const items = wavesOf(1).map((w) => ({ t: tms(w.start), w }));
+      for (const [hhmm, text] of (DAY_INFO.d1 || [])) {
+        if (hhmm === '12:45') items.push({ t: tms(`${D1_DATE}T${hhmm}:00+08:00`), hhmm, text });
+      }
+      items.sort((a, b) => a.t - b.t);
+      const head = (st) => h('span', {}, sitePlate(st, 'xs'), `${STATION_LABEL[st]} · ${STATION_PCS[st]}`);
+      return slideEl('gschedule',
+        h('div', { class: 'sch-top' },
+          title('1-р өдөр'),
+          h('div', { class: 'sch-sub' }, h('b', {}, fmtDate(TIMES.day1Start)), h('span', {}, 'Хэсгийн шат · MR12'))),
+        h('div', { class: 'gs-open' }, icon('clock'),
+          h('span', {}, h('b', {}, fmtTime(D1_REG)), ' бүртгэл'), h('i', {}, '·'),
+          h('span', {}, h('b', {}, fmtTime(D1_OPEN)), ` нээлт, ${PLACES.hall}д`)),
+        h('div', { class: 'sch gs' },
+          h('div', { class: 'sch-h' }, h('span', {}, 'Цаг'), head('A'), head('B')),
+          items.map((it) => {
+            if (!it.w) return h('div', { class: 'sch-r brk' }, h('b', { class: 'sch-t' }, it.hhmm), h('div', { class: 'sch-x' }, it.text));
+            const ms = it.w.nos.map((no) => byNo.get(no)).filter(Boolean);
+            return h('div', { class: 'sch-r' },
+              h('b', { class: 'sch-t' }, fmtTime(it.w.start)),
+              matchCell(ms.find((m) => m.station === 'A'), now),
+              matchCell(ms.find((m) => m.station === 'B'), now));
+          })));
+    },
+
+    // Тоглогчийн 10 дүрэм (маягт 06, удирдамж 02): нэг мөр — нэг дүрэм.
+    rules10: () => slideEl('rules10',
+      title(['Тоглогчийн ', h('em', {}, '10 дүрэм')]),
+      h('ol', { class: 'r10' }, RULES10.map(([ico, lead, rest], i) => h('li', { class: `r10-i${i === 0 ? ' hot' : ''}` },
+        h('b', { class: 'r10-n' }, pad2(i + 1)), icon(ico),
+        h('span', { class: 'r10-t' }, h('b', {}, lead), ` ${rest}`))))),
+
+    // Анги удирдсан багш = багийн менежер (удирдамж 02-ын 4.8, SPEC §8).
+    managers: () => slideEl('managers',
+      kick('Анги удирдсан багш — багийн менежер'),
+      title('Менежерийн үүрэг'),
+      h('div', { class: 'mgr' }, MANAGER_DUTIES.map(([ico, when, text]) => h('div', { class: 'mgr-c' },
+        h('div', { class: 'mgr-h' }, icon(ico), h('b', {}, when)),
+        h('span', {}, text))))),
+
+    // Урам: 12 баг (сугалаа гарсан бол хэсгийн өнгөөр), уриа, нээлтийн цаг.
+    goodluck: () => {
+      const teams = TEAMS.slice().sort((a, b) => (Number(a.is_teachers) - Number(b.is_teachers)) || (a.id - b.id));
+      return slideEl('goodluck',
+        h('div', { class: 'gl-top' },
+          h('div', { class: 'gl-copy' },
+            title('Амжилт хүсье!', 'gl-h'),
+            h('div', { class: 'gl-sub' }, '12 баг. ', h('em', {}, '1 цом.'))),
+          h('div', { class: 'gl-art' }, h('i', { class: 'hero-rays deco' }), bigTrophy())),
+        h('div', { class: 'gl-teams' }, teams.map((t) => {
+          const g = groupOfCode(t.code);
+          const tile = h('div', { class: `gl-t${t.is_teachers ? ' teach' : ''}` },
+            h('b', {}, classUp(nameByCode(state, t.code))), g ? h('i', { class: 'gl-g' }, GROUP_LABEL[g]) : null);
+          return g ? vars(tile, { '--gc': GROUP_COLOR[g] }) : tile;
+        })),
+        h('div', { class: 'gl-motto' }, ['Шударга тогло', 'Багаараа ял', 'GG WP']
+          .flatMap((t, i) => (i ? [h('i', {}, '·'), h('b', {}, t)] : [h('b', {}, t)]))),
+        h('div', { class: 'gl-open' }, icon('calendar'), h('b', {}, dayTime(D1_OPEN)), h('span', {}, `· ${PLACES.hall}д нээлт`)));
+    },
   };
 
   function buildSlide(id) {
@@ -894,7 +1024,7 @@ export default async function render(root, params = {}) {
     const d2 = wavesOf(2);
     const span = (w) => (w.length ? `${fmtTime(w[0].start)}–${fmtTime(w[w.length - 1].end)}` : '');
     const spec = p === 'reg' ? { label: 'Онлайн бүртгэл хаагдана', at: s.reg, time: fmtTime(s.reg) }
-      : p === 'closed' ? { label: 'Тэмцээн эхэлнэ', at: TIMES.day1Start, time: fmtTime(TIMES.day1Start) }
+      : p === 'closed' || p === 'prep' ? { label: 'Тэмцээн эхэлнэ', at: TIMES.day1Start, time: fmtTime(TIMES.day1Start) }
         : p === 'day1' ? { label: 'Хэсгийн шат', at: TIMES.day1Start, time: span(d1) }
           : p === 'night' || p === 'day2' ? { label: 'Шөвгийн 8 · Финал', at: TIMES.day2First, time: span(d2) }
             : null;
@@ -1045,6 +1175,7 @@ export default async function render(root, params = {}) {
       else renderTab();
     }
     renderRail();
+    refreshTicker();      // хугацаанаас хамаарах мөр (prep: хураамж, бүрэлдэхүүн) хугацаа өнгөрмөгц алга болно; өөрчлөлтгүй бол юу ч хийхгүй
     updateDebug();
     if (!opt.isStatic) T.tick = setTimeout(tick, 1000 - (Date.now() % 1000) + 15);
   }

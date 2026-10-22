@@ -7,9 +7,11 @@ import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
-  SLIDE_IDS, SLIDE_LABEL, TIMES, settingsOf, finished, drawShown, regSummary, screenPhase, wavesOf, slidesFor, countdownFor,
+  SLIDE_IDS, SLIDE_LABEL, TIMES, PREP_SLIDES, settingsOf, finished, drawShown, regSummary, screenPhase, wavesOf, slidesFor,
+  countdownFor,
 } from '../docs/js/phase.js';
 import { DATES, DRAW_AT, MATCHES, DAY_INFO, TEAMS } from '../docs/js/event.js';
+import { PLACES } from '../docs/js/config.js';
 import { makeState, setResult } from './fixtures.mjs';
 
 const MIN = 60 * 1000;
@@ -52,20 +54,24 @@ const AWARDS = 'Шагнал гардуулах хүртэл';
 const CHIP = 'Өнөөдөр 16:00 — хэсгийн сугалаа';
 const REG = ['hero', 'race', 'prize', 'join', 'fee', 'req', 'gear', 'teachers', 'format', 'dates'];
 const CLOSED = ['kickoff', 'day1', 'day2', 'prize', 'rules', 'gear', 'watch'];
+const PREP = ['groups', 'gschedule', 'rules10', 'managers', 'gear', 'goodluck', 'prize', 'watch'];
+const PREP_ONLY = new Set(['gschedule', 'rules10', 'managers', 'goodluck']);
 const LIVE_ONLY = new Set(['race', 'live']);
+const FEE_SUB = { label: 'Хураамж, зөвшөөрөл', at: DATES.fee_due_at };
+const FREEZE_SUB = { label: 'Бүрэлдэхүүн царцах', at: DATES.roster_freeze_at };
 
 // ================================================================ constants
 describe('phase.js constants', () => {
-  test('SLIDE_IDS: 21 unique URL-safe ids, each with a label; frozen', () => {
-    assert.equal(SLIDE_IDS.length, 21);
-    assert.equal(new Set(SLIDE_IDS).size, 21);
+  test('SLIDE_IDS: 25 unique URL-safe ids, each with a label; frozen', () => {
+    assert.equal(SLIDE_IDS.length, 25);
+    assert.equal(new Set(SLIDE_IDS).size, 25);
     assert.deepEqual(Object.keys(SLIDE_LABEL).sort(), [...SLIDE_IDS].sort());
     for (const id of SLIDE_IDS) {
       assert.match(id, /^[a-z0-9]+$/, id);                     // used in ?slide=<id> and data-slide
       const l = SLIDE_LABEL[id];
       assert.ok(typeof l === 'string' && l.length > 0 && l === l.trim(), `${id}: «${l}»`);
     }
-    assert.ok(Object.isFrozen(SLIDE_IDS) && Object.isFrozen(SLIDE_LABEL) && Object.isFrozen(TIMES));
+    assert.ok(Object.isFrozen(SLIDE_IDS) && Object.isFrozen(SLIDE_LABEL) && Object.isFrozen(TIMES) && Object.isFrozen(PREP_SLIDES));
   });
 
   test('TIMES agree with event.js (SPEC v5 §7)', () => {
@@ -87,7 +93,10 @@ describe('phase.js constants', () => {
 
 // ================================================================ settingsOf / finished / drawShown
 describe('settingsOf', () => {
-  const DEF = { reg: DATES.reg_closes_at, consent: DATES.consent_deadline_at, fee: DATES.fee_due_at, draw: DRAW_AT, open: true, stream: null };
+  const DEF = {
+    reg: DATES.reg_closes_at, consent: DATES.consent_deadline_at, freeze: DATES.roster_freeze_at, fee: DATES.fee_due_at,
+    draw: DRAW_AT, open: true, stream: null,
+  };
 
   test('defaults from event.js when the state has no settings', () => {
     for (const st of [null, undefined, {}, { settings: null }, { settings: {} }]) assert.deepEqual(settingsOf(st), DEF);
@@ -96,10 +105,11 @@ describe('settingsOf', () => {
   test('valid live values win (incl. the RPC formats: other offset, fractions)', () => {
     const s = settingsOf({ settings: {
       reg_closes_at: iso('2026-10-23T20:00:00'), consent_deadline_at: iso('2026-10-23T12:00:00'),
+      roster_freeze_at: iso('2026-10-23T21:00:00'),
       registration_open: false, stream_url: 'https://www.facebook.com/OctolearnLondonSchool/live',
     } });
-    assert.deepEqual(s, { ...DEF, reg: iso('2026-10-23T20:00:00'), consent: iso('2026-10-23T12:00:00'), open: false,
-      stream: 'https://www.facebook.com/OctolearnLondonSchool/live' });
+    assert.deepEqual(s, { ...DEF, reg: iso('2026-10-23T20:00:00'), consent: iso('2026-10-23T12:00:00'),
+      freeze: iso('2026-10-23T21:00:00'), open: false, stream: 'https://www.facebook.com/OctolearnLondonSchool/live' });
     assert.equal(settingsOf({ settings: { reg_closes_at: '2026-10-23T15:59:59+00:00' } }).reg, '2026-10-23T15:59:59+00:00');
     assert.equal(settingsOf({ settings: { reg_closes_at: '2026-10-23T23:59:59.185744+08:00' } }).reg, '2026-10-23T23:59:59.185744+08:00');
   });
@@ -107,9 +117,10 @@ describe('settingsOf', () => {
   test('invalid ISO values are ignored', () => {
     for (const bad of ['garbage', '', '   ', '2026-10-23T25:61:00+08:00', '2026-13-01T00:00:00+08:00', null, undefined,
       Date.parse(DATES.reg_closes_at), true, {}, []]) {
-      const s = settingsOf({ settings: { reg_closes_at: bad, consent_deadline_at: bad } });
+      const s = settingsOf({ settings: { reg_closes_at: bad, consent_deadline_at: bad, roster_freeze_at: bad } });
       assert.equal(s.reg, DATES.reg_closes_at, JSON.stringify(bad));
       assert.equal(s.consent, DATES.consent_deadline_at, JSON.stringify(bad));
+      assert.equal(s.freeze, DATES.roster_freeze_at, JSON.stringify(bad));
     }
   });
 
@@ -119,6 +130,7 @@ describe('settingsOf', () => {
     } });
     assert.equal(s.fee, DATES.fee_due_at);
     assert.equal(s.draw, DRAW_AT);
+    assert.equal(s.freeze, iso('2026-10-21T16:00:00'));   // roster_freeze_at feeds only the «Бүрэлдэхүүн царцах» line
   });
 
   test('registration_open: only an explicit false closes', () => {
@@ -191,7 +203,7 @@ describe('screenPhase', () => {
     assert.equal(screenPhase(at('2026-10-24T07:00:00'), late), 'day1');
   });
 
-  test('10.24 06:59 closed → 07:00 day1 → 18:00 night → 10.25 07:00 day2 → 18:00 over', () => {
+  test('10.24 06:59 closed (prep with a published draw) → 07:00 day1 → 18:00 night → 10.25 07:00 day2 → 18:00 over', () => {
     const rows = [
       ['2026-10-24T06:59:00', 'closed'], ['2026-10-24T06:59:59', 'closed'], ['2026-10-24T07:00:00', 'day1'],
       ['2026-10-24T12:00:00', 'day1'], ['2026-10-24T17:59:59', 'day1'], ['2026-10-24T18:00:00', 'night'],
@@ -199,7 +211,8 @@ describe('screenPhase', () => {
       ['2026-10-25T17:59:59', 'day2'], ['2026-10-25T18:00:00', 'over'], ['2026-10-26T09:00:00', 'over'],
     ];
     for (const st of [makeState(), regState(), null]) {
-      for (const [t, p] of rows) assert.equal(screenPhase(at(t), st), p, t);
+      const before = drawShown(st) ? 'prep' : 'closed';
+      for (const [t, p] of rows) assert.equal(screenPhase(at(t), st), p === 'closed' ? before : p, t);
     }
   });
 
@@ -217,30 +230,28 @@ describe('screenPhase', () => {
 
 // ================================================================ slidesFor
 describe('slidesFor', () => {
-  test('reg: race only live; groups (before dates) only after the draw is published', () => {
+  test('reg: race only live; a published draw replaces the whole registration rotation (prep)', () => {
     const t = at('2026-10-20T10:00:00');
     assert.deepEqual(slidesFor(t, regState()), REG);
     assert.deepEqual(slidesFor(t, regState(), {}), REG);
     assert.deepEqual(slidesFor(t, regState(), { live: true }), REG);
     assert.deepEqual(slidesFor(t, regState(), { live: false }), REG.filter((id) => id !== 'race'));
-    for (const d of ['none', 'committed', 'computed']) {
-      assert.ok(!slidesFor(at('2026-10-22T16:30:00'), regState({ draw: d })).includes('groups'), d);
-    }
-    const pub = regState({ draw: 'published' });
     const t2 = at('2026-10-22T16:30:00');
-    assert.deepEqual(slidesFor(t2, pub), ['hero', 'race', 'prize', 'join', 'fee', 'req', 'gear', 'teachers', 'format', 'groups', 'dates']);
-    assert.deepEqual(slidesFor(t2, pub, { live: false }), ['hero', 'prize', 'join', 'fee', 'req', 'gear', 'teachers', 'format', 'groups', 'dates']);
-    pub.draw.groups = null;
-    assert.ok(!slidesFor(t2, pub).includes('groups'));
+    for (const d of ['none', 'committed', 'computed']) assert.deepEqual(slidesFor(t2, regState({ draw: d })), REG, d);
+    const pub = regState({ draw: 'published' });
+    assert.deepEqual(slidesFor(t2, pub), PREP);
+    assert.deepEqual(slidesFor(t2, pub, { live: false }), PREP);
+    pub.draw.groups = null;                                   // a published draw without groups is not shown
+    assert.deepEqual(slidesFor(t2, pub), REG);
   });
 
-  test('closed: kickoff, groups after the draw, the two days, prize, rules, gear, watch', () => {
+  test('closed (no published draw): kickoff, the two days, prize, rules, gear, watch; a published draw → prep', () => {
     const t = at('2026-10-24T02:00:00');
     assert.deepEqual(slidesFor(t, makeState({ drawStatus: 'none' })), CLOSED);
     assert.deepEqual(slidesFor(t, makeState({ drawStatus: 'computed' })), CLOSED);
-    const withGroups = ['kickoff', 'groups', ...CLOSED.slice(1)];
-    assert.deepEqual(slidesFor(t, makeState()), withGroups);
-    assert.deepEqual(slidesFor(t, makeState(), { live: false }), withGroups);
+    assert.deepEqual(slidesFor(t, makeState({ drawStatus: 'none' }), { live: false }), CLOSED);
+    assert.deepEqual(slidesFor(t, makeState()), PREP);
+    assert.deepEqual(slidesFor(t, makeState(), { live: false }), PREP);
     assert.deepEqual(slidesFor(at('2026-10-21T10:00:00'), regState({ settings: { registration_open: false } })), CLOSED);
   });
 
@@ -269,9 +280,9 @@ describe('gear slide (own mouse, keyboard, headset)', () => {
     assert.equal(SLIDE_IDS.indexOf('gear'), SLIDE_IDS.indexOf('req') + 1);
   });
 
-  test('reg: once, right after req and before teachers — live and static, before and after the draw', () => {
+  test('reg: once, right after req and before teachers — live and static, before the draw', () => {
     const rows = [[regState(), '2026-10-19T08:00:00'], [regState(), '2026-10-22T10:00:00'],
-      [regState({ draw: 'published' }), '2026-10-22T17:30:00'], [regState({ draw: 'published' }), '2026-10-23T23:59:58']];
+      [regState({ draw: 'computed' }), '2026-10-22T17:30:00'], [regState(), '2026-10-23T23:59:58']];
     for (const [s, t] of rows) {
       for (const live of [true, false]) {
         const list = slidesFor(at(t), s, { live });
@@ -282,15 +293,28 @@ describe('gear slide (own mouse, keyboard, headset)', () => {
     }
   });
 
-  test('closed: once, right after rules and before watch — with and without groups', () => {
-    const rows = [[makeState({ drawStatus: 'none' }), '2026-10-24T02:00:00'], [makeState(), '2026-10-24T05:00:00'],
-      [makeState(), '2026-10-24T06:59:59'], [regState({ settings: { registration_open: false } }), '2026-10-21T10:00:00']];
+  test('closed: once, right after rules and before watch', () => {
+    const rows = [[makeState({ drawStatus: 'none' }), '2026-10-24T02:00:00'], [makeState({ drawStatus: 'computed' }), '2026-10-24T05:00:00'],
+      [makeState({ drawStatus: 'none' }), '2026-10-24T06:59:59'], [regState({ settings: { registration_open: false } }), '2026-10-21T10:00:00']];
     for (const [s, t] of rows) {
       for (const live of [true, false]) {
         const list = slidesFor(at(t), s, { live });
         assert.equal(list.filter((id) => id === 'gear').length, 1, `${t} live=${live}`);
         assert.equal(list[list.indexOf('rules') + 1], 'gear', `${t} live=${live}`);
         assert.equal(after(list, 'gear'), 'watch', `${t} live=${live}`);
+      }
+    }
+  });
+
+  test('prep: once, right after managers and before goodluck', () => {
+    const rows = [[regState({ draw: 'published' }), '2026-10-22T17:30:00'], [regState({ draw: 'published' }), '2026-10-23T23:59:58'],
+      [makeState(), '2026-10-24T05:00:00'], [makeState(), '2026-10-24T06:59:59']];
+    for (const [s, t] of rows) {
+      for (const live of [true, false]) {
+        const list = slidesFor(at(t), s, { live });
+        assert.equal(list.filter((id) => id === 'gear').length, 1, `${t} live=${live}`);
+        assert.equal(list[list.indexOf('managers') + 1], 'gear', `${t} live=${live}`);
+        assert.equal(after(list, 'gear'), 'goodluck', `${t} live=${live}`);
       }
     }
   });
@@ -304,6 +328,77 @@ describe('gear slide (own mouse, keyboard, headset)', () => {
     // dropping 'gear' gives back the v5 lists exactly
     assert.deepEqual(REG.filter((id) => id !== 'gear'), ['hero', 'race', 'prize', 'join', 'fee', 'req', 'teachers', 'format', 'dates']);
     assert.deepEqual(CLOSED.filter((id) => id !== 'gear'), ['kickoff', 'day1', 'day2', 'prize', 'rules', 'watch']);
+  });
+});
+
+// ================================================================ prep phase (draw published → 10.24 07:00)
+describe('prep phase: tournament preparation after the draw', () => {
+  test('labels and order of the preparation slides', () => {
+    assert.deepEqual([...PREP_SLIDES], PREP);
+    assert.deepEqual(
+      ['gschedule', 'managers', 'rules10', 'goodluck'].map((id) => SLIDE_LABEL[id]),
+      ['1-р өдрийн хуваарь', 'Анги удирдсан багш нарт', 'Тоглогчийн 10 дүрэм', 'Амжилт хүсье'],
+    );
+    for (const id of PREP) assert.ok(SLIDE_IDS.includes(id), id);
+  });
+
+  test('reg → prep the moment the draw is published (registration open or closed), until 10.24 07:00', () => {
+    const t = at('2026-10-22T16:30:00');
+    assert.equal(screenPhase(t, regState()), 'reg');
+    for (const d of ['none', 'committed', 'computed']) assert.equal(screenPhase(t, regState({ draw: d })), 'reg', d);
+    const pub = regState({ draw: 'published' });
+    assert.equal(screenPhase(at('2026-10-22T16:10:00'), pub), 'prep');
+    assert.equal(screenPhase(t, pub), 'prep');
+    assert.equal(screenPhase(at('2026-10-23T23:59:58'), pub), 'prep');
+    assert.equal(screenPhase(at('2026-10-23T23:59:59'), pub), 'prep');            // registration closes: still prep, not closed
+    assert.equal(screenPhase(at('2026-10-24T06:59:59'), pub), 'prep');
+    assert.equal(screenPhase(at('2026-10-24T07:00:00'), pub), 'day1');
+    assert.equal(screenPhase(at('2026-10-22T17:00:00'), regState({ draw: 'published', settings: { registration_open: false } })), 'prep');
+    const late = regState({ draw: 'published', settings: { reg_closes_at: iso('2026-10-24T08:00:00') } });
+    assert.equal(screenPhase(at('2026-10-24T06:59:59'), late), 'prep');
+    assert.equal(screenPhase(at('2026-10-24T07:00:00'), late), 'day1');
+    for (const hm of ['00:00:00', '05:00:00', '06:59:59']) assert.equal(screenPhase(at(`2026-10-24T${hm}`), makeState()), 'prep', hm);
+    // the phase follows the data: groups missing or the draw taken back → registration rotation again
+    const noGroups = regState({ draw: 'published' });
+    noGroups.draw.groups = null;
+    assert.equal(screenPhase(t, noGroups), 'reg');
+    const back = regState({ draw: 'published' });
+    back.draw.status = 'computed';
+    assert.equal(screenPhase(t, back), 'reg');
+  });
+
+  test('slides: the same 8 preparation slides live and static, none of the registration push', () => {
+    for (const [s, hm] of [[regState({ draw: 'published' }), '2026-10-22T17:30:00'], [regState({ draw: 'published' }), '2026-10-23T21:00:00'],
+      [makeState(), '2026-10-24T05:00:00']]) {
+      for (const live of [true, false]) {
+        const list = slidesFor(at(hm), s, { live });
+        assert.deepEqual(list, PREP, `${hm} live=${live}`);
+        for (const id of ['hero', 'race', 'join', 'fee', 'req', 'teachers', 'format', 'dates', 'kickoff', 'day1', 'rules', 'live']) {
+          assert.ok(!list.includes(id), `${hm}: ${id}`);
+        }
+      }
+    }
+  });
+
+  test('countdown: to the opening 10.24 09:00; fee + consent line until 10.23 17:00, then the roster freeze until 23:59:59', () => {
+    const s = regState({ draw: 'published' });
+    const want = (sub) => ({ phase: 'prep', mode: 'countdown', label: 'Тэмцээн эхлэх хүртэл', target: d1('09:00'), sub, chip: null, urgent: false });
+    const rows = [
+      ['2026-10-22T16:10:00', FEE_SUB], ['2026-10-23T09:00:00', FEE_SUB], ['2026-10-23T16:59:59', FEE_SUB],
+      ['2026-10-23T17:00:00', FREEZE_SUB], ['2026-10-23T23:59:58', FREEZE_SUB],
+      ['2026-10-23T23:59:59', null], ['2026-10-24T05:00:00', null], ['2026-10-24T06:59:59', null],
+    ];
+    for (const [t, sub] of rows) assert.deepEqual(countdownFor(at(t), s), want(sub), t);
+    for (const [t, sub] of rows) assert.deepEqual(countdownFor(at(t), makeState()), want(sub), `closed registration ${t}`);
+    assert.equal(countdownFor(at('2026-10-24T07:00:00'), s).phase, 'day1');
+    // the freeze line follows settings.roster_freeze_at (invalid → event.js); never urgent, no chip
+    const moved = regState({ draw: 'published', settings: { roster_freeze_at: iso('2026-10-23T21:00:00') } });
+    assert.deepEqual(countdownFor(at('2026-10-23T20:59:59'), moved).sub, { label: FREEZE_SUB.label, at: iso('2026-10-23T21:00:00') });
+    assert.equal(countdownFor(at('2026-10-23T21:00:00'), moved).sub, null);
+    const bad = regState({ draw: 'published', settings: { roster_freeze_at: 'garbage' } });
+    assert.deepEqual(countdownFor(at('2026-10-23T18:00:00'), bad).sub, FREEZE_SUB);
+    assert.equal(countdownFor(at('2026-10-22T15:00:00'), s).chip, null);      // no draw-day chip once the groups are out
+    assert.equal(countdownFor(at('2026-10-23T23:00:00'), s).urgent, false);   // the registration urgency is gone
   });
 });
 
@@ -377,7 +472,7 @@ describe('countdownFor', () => {
 
   test('closed: counts to the opening 10.24 09:00', () => {
     const want = { phase: 'closed', mode: 'countdown', label: 'Тэмцээн эхлэх хүртэл', target: d1('09:00'), sub: null, chip: null, urgent: false };
-    for (const t of ['2026-10-23T23:59:59', '2026-10-24T06:59:59']) assert.deepEqual(countdownFor(at(t), makeState()), want, t);
+    for (const t of ['2026-10-23T23:59:59', '2026-10-24T06:59:59']) assert.deepEqual(countdownFor(at(t), makeState({ drawStatus: 'none' })), want, t);
     assert.deepEqual(countdownFor(at('2026-10-20T10:00:00'), regState({ settings: { registration_open: false } })), want);
   });
 
@@ -497,7 +592,7 @@ describe('10.19 – 10.26 sweep', () => {
     reg: regState(), regDrawn: regState({ draw: 'published' }), event: makeState(), ended: endState(), none: null,
   };
 
-  test('slides: known ids with labels, static = live minus race/live, no slide twice in a row, all 21 reachable', () => {
+  test('slides: known ids with labels, static = live minus race/live, no slide twice in a row, all 25 reachable', () => {
     const seen = new Set();
     for (const [name, s] of Object.entries(states)) {
       for (const t of marks) {
@@ -513,6 +608,10 @@ describe('10.19 – 10.26 sweep', () => {
         assert.deepEqual(still, live.filter((id) => !LIVE_ONLY.has(id)), where);
         for (let i = 0; i < live.length; i++) assert.notEqual(live[i], live[(i + 1) % live.length], where);
         for (let i = 0; i < still.length; i++) assert.notEqual(still[i], still[(i + 1) % still.length], where);
+        // the preparation slides appear exactly in the prep phase, and the prep phase shows exactly them
+        const prep = screenPhase(t, s) === 'prep';
+        assert.equal(live.some((id) => PREP_ONLY.has(id)), prep, where);
+        if (prep) assert.deepEqual(live, PREP, where);
       }
     }
     assert.deepEqual([...seen].sort(), [...SLIDE_IDS].sort());
@@ -536,7 +635,10 @@ describe('10.19 – 10.26 sweep', () => {
           assert.ok(c.matches.every((no) => MATCHES.find((m) => m.no === no).start === c.target), where);
         }
         if (c.phase === 'reg') assert.equal(c.urgent, Date.parse(c.target) - t < 24 * HOUR, where);
-        else assert.ok(c.sub === null && c.chip === null && c.urgent === false, where);
+        else if (c.phase === 'prep') {
+          assert.ok(c.chip === null && c.urgent === false && c.target === TIMES.day1Start, where);
+          assert.ok(c.sub === null || ([FEE_SUB.label, FREEZE_SUB.label].includes(c.sub.label) && Date.parse(c.sub.at) > t), where);
+        } else assert.ok(c.sub === null && c.chip === null && c.urgent === false, where);
       }
     }
   });
@@ -808,15 +910,85 @@ describe('text guard: SPEC v6 people, places and own gear on the screen', () => 
     assert.ok(has(text, '${PLACES.hall}ын LED дэлгэц'), 'spectators: the hall LED screen');
   });
 
-  test('gear slide: headline, three icon cards (mouse, keyboard, headset) and the four rule lines', { skip }, () => {
+  test('gear slide: headline, four icon cards (mouse, mouse pad, keyboard, headset) and the four rule lines', { skip }, () => {
     const text = scanText(SCREEN_JS);
-    for (const phrase of ['Өөрийн хэрэгслээ', 'авчир!', "'Хулгана'", "'Гар'", "'Чихэвч'",
+    for (const phrase of ['Өөрийн хэрэгслээ', 'авчир!', "'Хулгана'", "'Дэвсгэр'", "'хулганы pad'", "'Гар'", "'Чихэвч'",
+      'чихэвч, хулганы дэвсгэрээ авчирч болно',
       'USB-ээр шууд залгагдана', 'Программ суулгахгүй — тохиргоо төхөөрөмж дээрээ', 'Макро, скрипт хориотой',
       'Нэр, ангиа шошголоод тоглолтын дараа авч яв']) {
       assert.ok(has(text, phrase), phrase);
     }
-    for (const ico of ['mouse', 'keyboard', 'headset']) assert.match(text, new RegExp(`\\b${ico}:\\s*\\[`), `ICONS.${ico}`);
+    for (const ico of ['mouse', 'pad', 'keyboard', 'headset']) assert.match(text, new RegExp(`\\b${ico}:\\s*\\[`), `ICONS.${ico}`);
     assert.match(text, /\bgear:\s*\(\)\s*=>/, 'SLIDES.gear');
     assert.match(scanText('css/screen.css'), /\.s-gear\b/, 'screen.css styles .s-gear');
+  });
+});
+
+// ================================================================ preparation slides (prep) on the screen
+describe('text guard: preparation slides (groups, day-1 timetable, 10 rules, managers, good luck)', () => {
+  const there = existsSync(join(DOCS, SCREEN_JS));
+  const skip = there ? false : `${SCREEN_JS} is not written yet`;
+  /** Lines of a module-level array literal `const NAME = [ … ];` written one entry per line. */
+  const entries = (text, name) => {
+    const m = new RegExp(`const ${name} = \\[\\n([\\s\\S]*?)\\n\\];`).exec(text);
+    return m ? m[1].split('\n').filter((l) => /^\s*\[/.test(l)) : [];
+  };
+  const strings = (line) => [...line.matchAll(/'([^']*)'|`([^`]*)`/g)].map((m) => m[1] ?? m[2]);
+  /** The text as shown: ${PLACES.lab…} → the lab name, other expressions → one token. */
+  const shown = (s) => s.replace(/\$\{PLACES\.lab[^}]*\}/g, PLACES.lab).replace(/\$\{[^}]+\}/g, 'X');
+  const wordsOf = (s) => s.split(/\s+/).filter((w) => /[\p{L}\p{N}]/u.test(w));
+
+  test('rules10: exactly 10 rules (form 06 / regulation 02), each ≤ 9 words, with a known icon', { skip }, () => {
+    const text = scanText(SCREEN_JS);
+    const rules = entries(text, 'RULES10');
+    assert.equal(rules.length, 10, 'RULES10 has 10 entries');
+    const all = [];
+    for (const line of rules) {
+      const [ico, lead, rest] = strings(line);
+      assert.match(text, new RegExp(`\\b${ico}:\\s*\\[`), `ICONS.${ico}`);
+      const rule = shown(`${lead} ${rest}`);
+      assert.ok(wordsOf(rule).length <= 9, `${rule}: ${wordsOf(rule).length} words`);
+      all.push(rule);
+    }
+    const joined = all.join(' | ');
+    // lateness 15 min / 13:0, own Steam + QR, Steam name, phone to the referee, cheats/macros, respect, referee + captain,
+    // no food or drinks in the lab, log out + take the gear, 15-min screen break
+    for (const phrase of ['15 минутын өмнө', '10 минутаас илүү хоцорвол 13:0', 'Өөрийн Steam', 'Steam Mobile QR', '«8а | Нэр»',
+      'Утсаа шүүгчид хадгалуул', 'нэвтэрсний дараа', 'чит, макро, скрипт хориотой', 'Бие биеэ хүндэл', 'Шүүгчийн шийдвэрийг дага', 'зөвхөн ахлагч',
+      `Хоол, ундаа ${PLACES.lab}-д оруулахгүй`, 'Steam-ээс гарч', 'хэрэгслээ авч яв', '15 минут дэлгэцгүй амар', 'тоглолт бүрийн дараа']) {
+      assert.ok(joined.includes(phrase), phrase);
+    }
+    assert.match(text, /\brules10:\s*\(\)\s*=>/, 'SLIDES.rules10');
+  });
+
+  test('managers: ≤ 6 duties of the homeroom teacher = team manager (regulation 4.8, SPEC §8); never collects money', { skip }, () => {
+    const text = scanText(SCREEN_JS);
+    const duties = entries(text, 'MANAGER_DUTIES');
+    assert.ok(duties.length >= 5 && duties.length <= 6, `${duties.length} duties`);
+    const joined = duties.map((l) => strings(l).slice(1).join(' ')).join(' | ');
+    // 6.3 consents → social worker; 4.8/7.10 lab entrance; SPEC §8 managers' chat; 4.8/6.8 the captain pays, the teacher never collects
+    for (const phrase of ['${dayTime(DATES.consent_deadline_at)} хүртэл', 'Зөвшөөрлийг цуглуулж', 'нийгмийн ажилтанд өгнө', 'dayTime(D1_REG)',
+      'бүртгэлд ирнэ', 'Ээлжээс 15 минутын өмнө', 'Багаа ангиас ${nbPlace(PLACES.lab)}', 'ын үүдэнд авчирна', 'сахилга бат', 'Менежерүүдийн чат',
+      'Хуваарийн өөрчлөлт', 'Ахлагч зохион байгуулагчид төлнө', 'багш хураахгүй']) {
+      assert.ok(joined.includes(phrase) || text.includes(phrase), phrase);
+    }
+    // only the negative «хураахгүй» may appear; no fee duty (collecting or checking) for the teacher
+    assert.doesNotMatch(joined, /хураамж\s+хура(?!ахгүй)|мөнгө\s+хура(?!ахгүй)|төлс[өа]?нийг\s+шалга/iu, 'teachers do not collect the fee (4.8, 6.8)');
+    assert.match(text, /\bmanagers:\s*\(\)\s*=>/, 'SLIDES.managers');
+  });
+
+  test('gschedule, goodluck, groups: names from the published seats, opening line, station plates', { skip }, () => {
+    const text = scanText(SCREEN_JS);
+    for (const re of [/\bgschedule:\s*\(\)\s*=>/, /\bgoodluck:\s*\(\)\s*=>/, /\bgroups:\s*\(\)\s*=>/]) assert.match(text, re);
+    for (const phrase of ['wavesOf(1)', "hhmm === '12:45'", "' бүртгэл'", '` нээлт, ${PLACES.hall}д`', "'Амжилт хүсье!'",
+      "'12 баг. '", "'1 цом.'", "'Шударга тогло', 'Багаараа ял', 'GG WP'", '`· ${PLACES.hall}д нээлт`', 'dayTime(D1_OPEN)',
+      "sitePlate(st, 'xs')", 'STATION_PCS[st]', "case 'prep':"]) {
+      assert.ok(text.includes(phrase), phrase);
+    }
+    assert.equal(countOf(text, 'Шударга тоглолт'), 0);
+    const css = scanText('css/screen.css');
+    for (const cls of ['s-gschedule', 's-rules10', 's-managers', 's-goodluck', 'gs-open', 'r10-i', 'mgr-c', 'gl-teams']) {
+      assert.match(css, new RegExp(`\\.${cls}\\b`), `screen.css styles .${cls}`);
+    }
   });
 });

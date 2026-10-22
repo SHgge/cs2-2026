@@ -3,10 +3,14 @@
 // All times are absolute instants (ms since epoch); calendar comparisons use fixed UTC+8 (Asia/Ulaanbaatar, no DST).
 import { DATES, DRAW_AT, MATCHES } from './event.js';
 
-/** Every slide the screen can show, in a stable order. 'gear' (SPEC v6 §0b.6): players may bring their own gear. */
+/**
+ * Every slide the screen can show, in a stable order. 'gear' (SPEC v6 §0b.6): players may bring their own gear.
+ * 'gschedule', 'rules10', 'managers', 'goodluck': the 'prep' phase (draw published → day 1 07:00).
+ */
 export const SLIDE_IDS = Object.freeze([
   'hero', 'race', 'prize', 'join', 'fee', 'req', 'gear', 'teachers', 'format', 'groups', 'dates',
   'kickoff', 'day1', 'day2', 'rules', 'watch', 'live', 'standings', 'bracket', 'champion', 'thanks',
+  'gschedule', 'managers', 'rules10', 'goodluck',
 ]);
 
 /** Short tab label of each slide («03/10 · ШАГНАЛ» — the page uppercases it). */
@@ -16,6 +20,7 @@ export const SLIDE_LABEL = Object.freeze({
   dates: 'Гол хугацаа', kickoff: 'Тэмцээн эхэлнэ', day1: '1-р өдөр', day2: '2-р өдөр', rules: 'Дүрэм',
   watch: 'Шууд үзэх', live: 'Одоо', standings: 'Хэсгийн дүн', bracket: 'Хасагдах шат', champion: 'Аварга',
   thanks: 'Баярлалаа',
+  gschedule: '1-р өдрийн хуваарь', managers: 'Анги удирдсан багш нарт', rules10: 'Тоглогчийн 10 дүрэм', goodluck: 'Амжилт хүсье',
 });
 
 /** Event-day boundaries used by the screen (SPEC v5 §7). */
@@ -35,12 +40,16 @@ const ms = (iso) => { const v = Date.parse(iso); return Number.isFinite(v) ? v :
 const validIso = (v, def) => (typeof v === 'string' && Number.isFinite(Date.parse(v)) ? v : def);
 const ubDay = (t) => new Date(t + UB).toISOString().slice(0, 10);
 
-/** Live settings with event.js fallbacks. The draw time is fixed (DRAW_AT) — it never comes from roster_freeze_at. */
+/**
+ * Live settings with event.js fallbacks. The draw time is fixed (DRAW_AT) — it never comes from roster_freeze_at;
+ * roster_freeze_at is used only for the «Бүрэлдэхүүн царцах» line.
+ */
 export function settingsOf(state) {
   const s = (state && state.settings) || {};
   return {
     reg: validIso(s.reg_closes_at, DATES.reg_closes_at),
     consent: validIso(s.consent_deadline_at, DATES.consent_deadline_at),
+    freeze: validIso(s.roster_freeze_at, DATES.roster_freeze_at),
     fee: DATES.fee_due_at,
     draw: DRAW_AT,
     open: s.registration_open !== false,
@@ -95,6 +104,8 @@ export function regSummary(state) {
  * Screen phase at instant `now` (ms):
  * 'reg' (online registration open) → 'closed' (until 10.24 07:00) → 'day1' (07:00–18:00) → 'night' → 'day2' → 'over'
  * ('over' from 10.25 18:00, or earlier once the final and the 3rd-place match are official).
+ * 'prep' replaces 'reg' and 'closed' as soon as the draw is published (groups known) — until 10.24 07:00:
+ * the screen then prepares the teams (groups, day-1 timetable, rules, managers) instead of pushing registration.
  */
 export function screenPhase(now, state) {
   const s = settingsOf(state);
@@ -102,6 +113,7 @@ export function screenPhase(now, state) {
   if (now >= ms(TIMES.day2Open)) return 'day2';
   if (now >= ms(TIMES.day1End)) return 'night';
   if (now >= ms(TIMES.day1Open)) return 'day1';
+  if (drawShown(state)) return 'prep';
   if (s.open && now < ms(s.reg)) return 'reg';
   return 'closed';
 }
@@ -119,16 +131,21 @@ export function wavesOf(day) {
   return [...map.values()].sort((a, b) => ms(a.start) - ms(b.start));
 }
 
+/** Preparation rotation (draw published → 10.24 07:00): the same live and static (no live-only slide). */
+export const PREP_SLIDES = Object.freeze(['groups', 'gschedule', 'rules10', 'managers', 'gear', 'goodluck', 'prize', 'watch']);
+
 /**
  * Slide ids for the rotation. live=false (export/static mode) drops slides that only make sense with live data
- * (the registration race and the «now playing» board). The own-gear slide follows «req» (registration week) and
- * «rules» (the night before day 1).
+ * (the registration race and the «now playing» board). The own-gear slide follows «req» (registration week),
+ * «managers» (preparation) and «rules» (the night before day 1 without a published draw).
+ * 'groups' in the reg / closed lists is a fallback only: a published draw turns both phases into 'prep'.
  */
 export function slidesFor(now, state, { live = true } = {}) {
   const p = screenPhase(now, state);
   const groups = drawShown(state) ? 'groups' : null;
   let list;
   switch (p) {
+    case 'prep': list = [...PREP_SLIDES]; break;
     case 'reg': list = ['hero', live ? 'race' : null, 'prize', 'join', 'fee', 'req', 'gear', 'teachers', 'format', groups, 'dates']; break;
     case 'closed': list = ['kickoff', groups, 'day1', 'day2', 'prize', 'rules', 'gear', 'watch']; break;
     case 'day1': list = live ? ['live', 'standings', 'live', 'day1', 'prize', 'watch'] : ['standings', 'day1', 'prize', 'watch']; break;
@@ -144,10 +161,16 @@ export function slidesFor(now, state, { live = true } = {}) {
  * mode: 'countdown' (target = ISO to count to), 'live' (a match wave is on: start → target = wave end,
  * drawn as a round-timer bar), 'none' (after the event).
  * sub: an extra deadline line { label, at }; chip: a short alert text; urgent: < 24 h left (registration).
+ * prep: counts to the opening; sub = the next of «fee + consent» (10.23 17:00) and «roster freeze» (10.23 23:59).
  */
 export function countdownFor(now, state) {
   const p = screenPhase(now, state);
   const s = settingsOf(state);
+  if (p === 'prep') {
+    const sub = now < ms(s.fee) ? { label: 'Хураамж, зөвшөөрөл', at: s.fee }
+      : now < ms(s.freeze) ? { label: 'Бүрэлдэхүүн царцах', at: s.freeze } : null;
+    return { phase: p, mode: 'countdown', label: 'Тэмцээн эхлэх хүртэл', target: TIMES.day1Start, sub, chip: null, urgent: false };
+  }
   if (p === 'reg') {
     const left = ms(s.reg) - now;
     return {
