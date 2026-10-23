@@ -1,19 +1,31 @@
 // ТВ / Урлагийн заалын LED дэлгэц: цаг, станц бүрийн ОДОО ба ДАРАА тоглолт, дараагийн ээлжийн дуудлага (Windows lab-ын үүдэнд),
-// 20 секунд тутам «Хэсгийн байр» ↔ «Хасагдах шат» (?panel=groups|bracket — нэгийг нь тогтмол харуулна).
+// 20 секунд тутам «Хэсгийн байр» ↔ «Хасагдах шат» (?panel=groups|bracket|veto — нэгийг нь тогтмол харуулна).
+// Газрын зургийн хасалт (удирдамж 02 §7.9): станц бүрийн одоогийн/дараагийн тоглолтын самбар «Газрын зургийн хасалт»
+// эргэлтэд нэмэгдэнэ; хасалт явагдаж байхад тэр самбар дээр тогтоно, дуусахад шийдэгдсэн газрын зураг нэг ээлж (20 с) үлдэнэ.
+// Шинэ хувилбар гарвал (config.js BUILD, 10 минут тутам) хуудсыг өөрөө дахин ачаална (#/screen-тэй адил; ?overlay=1-д биш).
 // ?overlay=1 — OBS-д зориулсан ил тод доод мөр (?overlay=1&station=A — зөвхөн нэг станц). Зөвхөн ангийн нэр харуулна.
 import { h, clear, fmtTime, fmtDate } from '../ui.js';
 import { store } from '../store.js';
-import { SCHOOL, FB_PAGE, PLACES } from '../config.js';
+import { BUILD, SCHOOL, FB_PAGE, PLACES } from '../config.js';
 import { GROUPS, STATION_LABEL, EVENT_NAME, CUP_NAME } from '../event.js';
 import {
   makeClock, mergedMatches, stationNowNext, nextWave, sideInfo, scoreText, isDone, statusOf, stageTag,
-  fallbackState, ubDay, fmtDateShort, winnerSide,
+  fallbackState, ubDay, fmtDateShort, winnerSide, vetoInfo, mapName,
 } from './schedule.js';
 import { groupCard } from './groups.js';
 import { bracketTree } from './bracket.js';
 
 const ROTATE_MS = 20000;
 const STALE_MS = 60000;
+const MIN = 60 * 1000;
+/** Хасалт эхлээгүй дараагийн тоглолтын самбар: эхлэхээс 30 минутын өмнөөс. */
+const VETO_LEAD_MS = 30 * MIN;
+/** Эхлэх цагаас хойш 20 минут өнгөрсөн 'live' тоглолтын эхлээгүй хасалт = шүүгч апп-аар хийгээгүй → самбаргүй. */
+const VETO_SKIP_MS = 20 * MIN;
+/** Хасалт дуусаагүй ч эхлэх цагаас 30 минут өнгөрвөл хасалтын самбар дээр тогтохоо болино (эргэлтэд үлдэнэ). */
+const VETO_PIN_MS = 30 * MIN;
+/** Шинэ хувилбар (config.js BUILD) шалгах давтамж — #/screen-тэй адил. */
+const BUILD_CHECK_MS = 10 * MIN;
 const PCS = { A: 'PC 01–10', B: 'PC 11–20' };
 const iso = (ms) => new Date(ms).toISOString();
 
@@ -24,7 +36,7 @@ export default async function render(root, params = {}) {
   const only = st === 'A' || st === 'B' ? st : null;
   const stations = only ? [only] : ['A', 'B'];
   const PANELS = ['groups', 'bracket'];
-  const fixedPanel = PANELS.includes(q.panel) ? q.panel : null;
+  const fixedPanel = [...PANELS, 'veto'].includes(q.panel) ? q.panel : null;
   const clock = makeClock();
   store.setInterval(5000);
   document.body.classList.add(overlay ? 'tv-overlay' : 'tv-mode');
@@ -34,6 +46,9 @@ export default async function render(root, params = {}) {
   let lastSeen = null;
   let armed = false;
   let panel = 0;
+  let shownPanel = null;
+  let wasPinned = false;
+  let holdUntil = 0;
   let disposed = false;
 
   // ---------- бүтэц ----------
@@ -90,15 +105,66 @@ export default async function render(root, params = {}) {
           h('div', { class: 'tv-tags' }, h('span', { class: `tv-tag${current ? ' live' : ''}` }, tag), stageTag(main),
             !current && statusOf(main).text ? h('span', { class: 'tv-stx' }, statusOf(main).text) : null),
           teamsLine(main),
-          h('div', { class: 'tv-meta' }, `${fmtTime(main.start)}–${fmtTime(main.end)}`))
+          h('div', { class: 'tv-meta' }, `${fmtTime(main.start)}–${fmtTime(main.end)}`, mapChip(main)))
         : h('div', { class: 'tv-now empty' }, h('p', {}, 'Одоогоор тоглолт алга')),
       next
         ? h('div', { class: 'tv-next' },
           h('span', { class: 'tv-tag' }, 'ДАРАА'),
           h('b', { class: 'tv-ntime' }, ubDay(Date.parse(next.start)) === ubDay(now) ? fmtTime(next.start) : `${fmtDateShort(next.start)} ${fmtTime(next.start)}`),
           stageTag(next),
-          teamsLine(next, 'tv-nmatch'))
+          teamsLine(next, 'tv-nmatch'),
+          mapChip(next))
         : null);
+  }
+
+  // ---------- газрын зургийн хасалт (удирдамж 02 §7.9) ----------
+  /** Мөрөнд: шийдэгдсэн газрын зураг, эсвэл «Газрын зургийн хасалт 3/6». Хасалт эхлээгүй / өгөгдөлгүй бол юу ч үгүй. */
+  function mapChip(m) {
+    const v = vetoInfo(cur, m);
+    if (!v || (!v.started && !v.map)) return null;
+    return v.map
+      ? h('span', { class: 'tv-mapc' }, h('small', {}, 'Газрын зураг'), mapName(v.map))
+      : h('span', { class: 'tv-mapc prog' }, `Газрын зургийн хасалт ${v.steps.length}/${v.total}`);
+  }
+
+  /**
+   * Станцын хасалтын самбарт харуулах тоглолт: хасалт явагдаж буй → одоогийн → 30 минутын дотор эхлэх дараагийн.
+   * null = самбаргүй (хуучин төлөв, эсвэл ойрын тоглолт алга). active = хасалт явагдаж байна → самбар дээр тогтоно.
+   */
+  function vetoFocus(rows, station, now) {
+    const { current, next } = stationNowNext(rows, station, now);
+    const list = [current, next].filter(Boolean).map((m) => ({ m, v: vetoInfo(cur, m), at: Date.parse(m.start) })).filter((x) => x.v);
+    const going = (x) => x.v.started && !x.v.done;
+    const show = (x) => x.v.started || x.v.done || (x.m === current
+      ? !(x.m.status === 'live' && now - x.at > VETO_SKIP_MS)
+      : !current && x.at - now <= VETO_LEAD_MS);
+    const f = list.find(going) || list.find((x) => x.m === current && show(x)) || list.find((x) => x.m === next && show(x));
+    return f ? { ...f, isNow: f.m === current, active: going(f) && !(now - f.at > VETO_PIN_MS) } : null;
+  }
+
+  /** Нэг станцын самбар: ээлж («8а хасна (3/6)») эсвэл «Тоглох газрын зураг», 7 хавтан — хассан нь зурсан + хассан баг. */
+  function vetoBoard(station, f) {
+    const head = h('header', { class: 'tv-vb-h' }, h('b', {}, STATION_LABEL[station] || station),
+      f ? h('span', { class: `tv-tag${f.isNow ? ' live' : ''}` }, f.isNow ? 'ОДОО' : `ДАРАА ${fmtTime(f.m.start)}`) : null,
+      f ? teamsLine(f.m, 'tv-nmatch') : null);
+    if (!f) return h('article', { class: 'tv-vb empty' }, head, h('p', {}, 'Одоогоор хасалт алга'));
+    const { m, v } = f;
+    const team = (side) => sideInfo(cur, m, side).text;
+    let turn;
+    if (v.done) turn = h('div', { class: 'tv-vb-st done' }, h('small', {}, 'Тоглох газрын зураг'), h('b', {}, mapName(v.map)));
+    else if (!v.next) turn = h('div', { class: 'tv-vb-st' }, 'Зоос хаяж, эхэлж хасах багийг тодруулна');
+    else if (!v.started && m.stage !== 'group') turn = h('div', { class: 'tv-vb-st' }, 'Зоосоор ', h('b', {}, team(v.next.side)), ' эхэлж хасна');
+    else turn = h('div', { class: 'tv-vb-st' }, h('b', {}, team(v.next.side)), ` хасна (${v.steps.length}/${v.total})`);
+    const by = new Map(v.steps.map((x) => [x.map, x.side]));
+    return h('article', { class: `tv-vb${v.done ? ' is-done' : ''}${m.grp ? ` gc-${m.grp}` : ` ko-${m.stage}`}` }, head, turn,
+      h('div', { class: 'tv-maps' }, v.pool.map((k) => {
+        const side = by.get(k);
+        const pick = v.map === k;
+        const label = side ? team(side) : pick ? 'Тоглоно' : '';
+        return h('div', { class: `tv-map${side ? ' ban' : pick ? ' pick' : ''}` },
+          h('b', {}, mapName(k)),
+          h('span', { class: label.length > 10 ? 'long' : null }, label || '\u00A0'));
+      })));
   }
 
   function callBox(rows, now) {
@@ -116,17 +182,27 @@ export default async function render(root, params = {}) {
     call.appendChild(h('span', { class: 'tv-call-s' }, `Тоглолт ${fmtTime(iso(w.start))}-д эхэлнэ`));
   }
 
+  /** Хасалтын самбар байгаа үед «Газрын зургийн хасалт» эргэлтэд нэмэгдэнэ; хасалт явагдаж байвал түүн дээр тогтоно. */
   function drawRot(now, rows) {
-    const p = fixedPanel || PANELS[panel % PANELS.length];
+    const foci = stations.map((s) => [s, vetoFocus(rows, s, now)]);
+    const list = fixedPanel === 'veto' || foci.some(([, f]) => f) ? [...PANELS, 'veto'] : PANELS;
+    const pinned = foci.some(([, f]) => f && f.active);
+    if (wasPinned && !pinned) holdUntil = now + ROTATE_MS;   // шийдэгдсэн газрын зургийг нэг ээлж (20 с) самбар дээр үлдээнэ
+    wasPinned = pinned;
+    const p = fixedPanel || (pinned || (now < holdUntil && list.includes('veto')) ? 'veto' : list[panel % list.length]);
+    shownPanel = p;
     clear(rotBody);
     clear(rotDots);
-    if (!fixedPanel) PANELS.forEach((x, i) => rotDots.appendChild(h('i', { class: x === p ? 'on' : '' })));
+    if (!fixedPanel) list.forEach((x) => rotDots.appendChild(h('i', { class: x === p ? 'on' : '' })));
     if (p === 'groups') {
       rotTitle.textContent = 'Хэсгийн байр';
       rotBody.appendChild(h('div', { class: 'tv-groups' }, GROUPS.map((g) => groupCard(cur, g, { compact: true, now, rows }))));
-    } else {
+    } else if (p === 'bracket') {
       rotTitle.textContent = 'Хасагдах шат';
       rotBody.appendChild(bracketTree(cur, { compact: true, now, rows }));
+    } else {
+      rotTitle.textContent = 'Газрын зургийн хасалт';
+      rotBody.appendChild(h('div', { class: `tv-vetos${foci.length === 1 ? ' one' : ''}` }, foci.map(([s, f]) => vetoBoard(s, f))));
     }
     requestAnimationFrame(fitRot);
   }
@@ -192,7 +268,9 @@ export default async function render(root, params = {}) {
     for (const s of stations) stationsBox.appendChild(stationCard(s, rows, now));
     callBox(rows, now);
     drawTicker();
-    if (withRot) drawRot(now, rows);
+    // хасалтын самбарыг 5 секунд тутам шинэчилнэ; хасалт эхэлмэгц тэр самбар руу шууд шилжинэ
+    const pin = !fixedPanel && stations.some((s) => { const f = vetoFocus(rows, s, now); return !!(f && f.active); });
+    if (withRot || shownPanel === 'veto' || pin) drawRot(now, rows);
   }
 
   function tickClock() {
@@ -237,6 +315,22 @@ export default async function render(root, params = {}) {
     drawRot(clock.now(), mergedMatches(cur));
   }, ROTATE_MS);
 
+  /** Шинэ хувилбар гарвал (config.js BUILD) хуудсыг дахин ачаална (screen.js-ийн checkBuild). OBS-ийн давхаргад биш. */
+  async function checkBuild() {
+    try {
+      const res = await fetch(`js/config.js?b=${Date.now()}`, { cache: 'no-store' });
+      if (!res.ok || disposed) return;
+      const m = /BUILD\s*=\s*['"]([^'"]+)['"]/.exec(await res.text());
+      if (!m || m[1] === BUILD || disposed) return;
+      let prev = null;
+      try { prev = JSON.parse(sessionStorage.getItem('tv-reload') || 'null'); } catch { prev = null; }
+      if (prev && prev.b === m[1] && Date.now() - prev.at < 30 * MIN) return;   // HTML кэш хуучин байж болно
+      try { sessionStorage.setItem('tv-reload', JSON.stringify({ b: m[1], at: Date.now() })); } catch { /* ignore */ }
+      location.reload();
+    } catch { /* сүлжээгүй */ }
+  }
+  const tBuild = overlay ? null : setInterval(checkBuild, BUILD_CHECK_MS);
+
   // Дэлгэц унтрахаас сэргийлнэ (дэмждэг хөтөч дээр).
   let wake = null;
   const lock = async () => {
@@ -261,7 +355,7 @@ export default async function render(root, params = {}) {
   return () => {
     disposed = true;
     unsub();
-    clearInterval(tClock); clearInterval(tData); clearInterval(tRot); clearTimeout(idleT);
+    clearInterval(tClock); clearInterval(tData); clearInterval(tRot); clearInterval(tBuild); clearTimeout(idleT);
     document.removeEventListener('visibilitychange', onVis);
     document.removeEventListener('mousemove', onMove);
     window.removeEventListener('resize', onResize);

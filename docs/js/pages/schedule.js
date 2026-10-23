@@ -4,7 +4,7 @@ import { h, clear, fmtTime, fmtDate, loading, groupChip } from '../ui.js';
 import { store } from '../store.js';
 import { PLACES } from '../config.js';
 import { MATCHES, DAY_INFO, GROUP_LABEL, STATION_LABEL, TEAMS } from '../event.js';
-import { resolveMatches, fmtScore } from '../logic.js';
+import { resolveMatches, fmtScore, mapPool, mapInfo, vetoState } from '../logic.js';
 
 const MIN = 60 * 1000;
 const HOUR = 60 * MIN;
@@ -81,7 +81,9 @@ export function sideInfo(state, m, side, { long = false } = {}) {
 }
 
 const BASE_KEYS = ['stage', 'code', 'grp', 'station', 'start', 'end'];
-/** event.MATCHES + төлөвийн оноо/төлөв + logic.resolveMatches-ийн багууд. Хугацаагаар эрэмбэлсэн. */
+/** Газрын зургийн хасалтын талбарууд (13-р migration). Хуучин төлөвт байхгүй → тоглолтод ч нэмэхгүй. */
+const VETO_KEYS = ['veto_first', 'veto_coin', 'veto', 'map'];
+/** event.MATCHES + төлөвийн оноо/төлөв/хасалт + logic.resolveMatches-ийн багууд. Хугацаагаар эрэмбэлсэн. */
 export function mergedMatches(state) {
   const view = publicView(state);
   const live = new Map();
@@ -98,6 +100,7 @@ export function mergedMatches(state) {
       ot: l.ot ?? null, forfeit: l.forfeit ?? null,
     };
     for (const k of BASE_KEYS) if (l[k] != null && l[k] !== '') m[k] = l[k];
+    for (const k of VETO_KEYS) if (l[k] !== undefined) m[k] = l[k];
     m.src_a = base.src_a; m.src_b = base.src_b;
     m.team_a = r.team_a ?? null; m.team_b = r.team_b ?? null;
     return m;
@@ -229,6 +232,21 @@ export function offlineNote(info) {
   return h('p', { class: 'muted small pub-stale', role: 'status' }, 'Холболт түр тасарлаа. Сүүлийн мэдээллийг харуулж байна.');
 }
 
+/**
+ * Газрын зургийн хасалт (удирдамж 02 §7.9): logic.vetoState + pool (харуулах дараалал) + map (тоглох газрын зураг).
+ * Төлөвт хасалтын талбар байхгүй бол (13-р migration-аас өмнө) null — юу ч нэмж харуулахгүй.
+ */
+export function vetoInfo(state, m) {
+  if (!m || (!Array.isArray(m.veto) && typeof m.map !== 'string')) return null;
+  return safe(() => {
+    const pool = mapPool(state);
+    const v = vetoState(m, pool);
+    const map = v.map || (pool.includes(m.map) ? m.map : null);
+    return { ...v, pool, map, done: v.done || !!map };
+  }, null);
+}
+export const mapName = (key) => mapInfo(key).name;
+
 // ---------- тоглолтын карт (schedule, groups, home) ----------
 export function stageTag(m) {
   if (m.stage === 'group' && m.grp) return groupChip(m.grp);
@@ -236,11 +254,26 @@ export function stageTag(m) {
   return h('span', { class: `chip pub-ko${m.stage === 'final' ? ' gold' : ''}` }, label);
 }
 
+/** Хасалт эхэлсний дараа: хассан газрын зургууд (зурсан, жижиг), шийдэгдвэл «Газрын зураг: Mirage». */
+function vetoLine(state, m) {
+  const v = vetoInfo(state, m);
+  if (!v || (!v.started && !v.map)) return null;
+  const who = (side) => sideInfo(state, m, side).text;
+  return h('div', { class: 'pm-veto' },
+    v.map
+      ? h('span', { class: 'pm-map' }, 'Газрын зураг: ', h('b', {}, mapName(v.map)))
+      : h('span', { class: 'pm-vstep' }, `Газрын зургийн хасалт ${v.steps.length}/${v.total}:`),
+    v.steps.length
+      ? h('span', { class: 'pm-bans' }, v.map ? h('span', { class: 'visually-hidden' }, 'Хассан:') : null,
+        v.steps.map((x) => h('s', { title: `${who(x.side)} хассан` }, mapName(x.map))))
+      : null);
+}
+
 function teamSpan(info, cls) {
   return h('span', { class: `pm-team${info.known ? '' : ' ph'}${cls}`, title: info.known ? null : info.title }, info.text);
 }
 
-export function matchCard(state, m, now, { station = true, time = false, stage = true } = {}) {
+export function matchCard(state, m, now, { station = true, time = false, stage = true, veto = true } = {}) {
   const done = isDone(m);
   const live = isNow(m, now);
   const win = done ? winnerSide(m) : null;
@@ -258,7 +291,8 @@ export function matchCard(state, m, now, { station = true, time = false, stage =
     h('div', { class: 'pm-body' },
       teamSpan(A, mark('a')),
       score ? h('span', { class: 'pm-score' }, score) : h('span', { class: 'pm-vs', 'aria-label': 'эсрэг' }, '–'),
-      teamSpan(B, `${mark('b')} r`)));
+      teamSpan(B, `${mark('b')} r`)),
+    veto ? vetoLine(state, m) : null);
 }
 
 // ---------- «Хуваарь» хуудас ----------

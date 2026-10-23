@@ -1,5 +1,5 @@
 // 6. Үр дүн — 20 тоглолтын оноо (урьдчилсан/баталгаажсан), техникийн ялагдал, OT, хуваарь өөрчлөх,
-// хэсгийн байр (урьдчилсан), сугалаа (lot), хэсгийн дүн батлах, эцсийн байр.
+// хэсгийн байр (урьдчилсан), сугалаа (lot), хэсгийн дүн батлах, эцсийн байр, газрын зургийн хасалт (veto.js).
 import { h, toast, fmtTime, fmtDate, fmtDateTime, teamName } from '../ui.js';
 import { btn, section, chip, confirmDialog, matchStatusChip, MATCH_STATUS } from './core.js';
 import {
@@ -7,6 +7,7 @@ import {
 } from './util.js';
 import { resolveMatches, groupStandings, validScore, finalRanking, srcLabel } from '../logic.js';
 import { MATCHES, PRIZES } from '../event.js';
+import { vetoBox, vetoEnabled, VETO_OFF_TEXT } from './veto.js';
 
 const GROUP_STATUS = {
   pending: ['Эхлээгүй', ''], provisional: ['Урьдчилсан', 'gold'], needs_lot: ['Сугалаа хэрэгтэй', 'err'], complete: ['Дууссан', 'ok'],
@@ -23,7 +24,7 @@ const safe = (fn, fallback) => { try { return fn(); } catch (e) { console.error(
 const def = (no) => MATCHES.find((x) => x.no === no) || {};
 const sameTime = (a, b) => Date.parse(a || '') === Date.parse(b || '');
 
-function matchCard(ctx, m, mo, mp) {
+function matchCard(ctx, m, mo, mp, ui, vetoOn) {
   const st = ctx.state;
   const d = def(m.no);
   const ta = mo && mo.team_a != null ? mo.team_a : null;
@@ -130,6 +131,7 @@ function matchCard(ctx, m, mo, mp) {
       tag,
       h('span', { class: 'spacer' }),
       matchStatusChip(m.status)),
+    vetoOn ? safe(() => vetoBox(ctx, m.no, { nameA, nameB, known }, ui), null) : null,
     h('div', { class: 'adm-score-row' },
       h('span', { class: 'adm-tname' }, nameA),
       inA, h('span', { class: 'adm-colon' }, ':'), inB,
@@ -237,8 +239,9 @@ function rankingBox(ctx) {
     h('p', { class: 'muted small' }, `Цом, медаль, мөнгөн шагналыг зөвхөн ангийн багт олгоно; мөнгийг хаалтын үеэр баг хүлээн авч, ахлагч шагналын бүртгэлд гарын үсэг зурна. Шагналын сан ${mntText(PRIZES.fund)} (MVP орсон). MVP (жижиг цом + ${mntText(PRIZES.mvp_cash)}) — ангийн багийн тоглогчдоос ерөнхий шүүгч ба зохион байгуулагч бүх тоглолтын статистикаар (MatchZy) шалгаруулна.`));
 }
 
-export function render(panel, ctx) {
+export function render(panel, ctx, ui = {}) {
   const st = ctx.state;
+  const vetoOn = vetoEnabled(st);
   const official = safe(() => resolveMatches(st, { official: true }), st.matches) || st.matches;
   const prov = safe(() => resolveMatches(st, { official: false }), st.matches) || st.matches;
   const by = (list, no) => (list || []).find((x) => x.no === no) || null;
@@ -254,10 +257,11 @@ export function render(panel, ctx) {
     ['1-р өдөр', st.matches.filter((m) => m.stage === 'group')],
     ['2-р өдөр', st.matches.filter((m) => m.stage !== 'group')],
   ];
+  if (!vetoOn) panel.appendChild(h('div', { class: 'card warn adm-veto-off', role: 'status' }, `${VETO_OFF_TEXT}.`));
   for (const [title, list] of days) {
     if (!list.length) continue;
     panel.appendChild(h('section', { class: 'adm-sec-plain' },
       h('h2', {}, `${title} — ${fmtDate(list[0].start)}`),
-      h('div', { class: 'adm-matches' }, list.map((m) => matchCard(ctx, m, by(official, m.no), by(prov, m.no))))));
+      h('div', { class: 'adm-matches' }, list.map((m) => matchCard(ctx, m, by(official, m.no), by(prov, m.no), ui, vetoOn)))));
   }
 }

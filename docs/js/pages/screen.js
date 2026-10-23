@@ -18,7 +18,7 @@ import {
 import { groupStandings } from '../logic.js';
 import {
   makeClock, mergedMatches, stationNowNext, sideInfo, isDone, isNow, winnerSide, scoreText, fallbackState,
-  fmtDateShort, publicView, nameByCode, teamLabel,
+  fmtDateShort, publicView, nameByCode, teamLabel, vetoInfo, mapName,
 } from './schedule.js';
 import { placesOf } from './bracket.js';
 import { loadQr, qrNode } from '../admin/qr.js';
@@ -483,11 +483,16 @@ export default async function render(root, params = {}) {
     const { A, B, joined } = pairText(state, m);
     const done = isDone(m);
     const win = done ? winnerSide(m) : null;
+    // Газрын зураг (удирдамж 02 §7.9): шийдэгдсэн бол нэр, хасалт явагдаж байвал «сонгож байна»; эхлээгүй / өгөгдөлгүй бол юу ч үгүй.
+    const v = vetoInfo(state, m);
+    const mapLine = !v || (!v.started && !v.map) ? null
+      : v.map ? h('div', { class: 'lc-map' }, h('span', {}, 'Газрын зураг'), h('b', {}, mapName(v.map)))
+        : h('div', { class: 'lc-map prog' }, h('span', {}, 'Газрын зураг сонгож байна'), h('b', {}, `${v.steps.length}/${v.total}`));
     const nextLine = current && next ? (() => {
       const p = pairText(state, next);
       return h('div', { class: 'lc-next' }, h('b', {}, `Дараа ${fmtTime(next.start)}`), h('span', {}, p.joined || `${p.A.text} – ${p.B.text}`));
     })() : null;
-    const card = h('div', { class: `lc${current ? ' is-live' : ''}${done ? ' is-done' : ''}${m.stage === 'final' ? ' final' : ''}` }, hd,
+    const card = h('div', { class: `lc${current ? ' is-live' : ''}${done ? ' is-done' : ''}${m.stage === 'final' ? ' final' : ''}${mapLine ? ' has-map' : ''}` }, hd,
       h('div', { class: 'lc-stage' }, `${stageText(m)} · ${fmtTime(m.start)}–${fmtTime(m.end)}`),
       h('div', { class: 'lc-mu' },
         joined
@@ -495,6 +500,7 @@ export default async function render(root, params = {}) {
           : [h('div', { class: `lc-team${A.known ? '' : ' ph'}${win === 'a' ? ' win' : ''}` }, A.text),
             h('div', { class: 'lc-vs' }, done ? (scoreText(m) || 'VS') : 'VS'),
             h('div', { class: `lc-team${B.known ? '' : ' ph'}${win === 'b' ? ' win' : ''}` }, B.text)]),
+      mapLine,
       nextLine);
     if (m.grp) vars(card, { '--gc': GROUP_COLOR[m.grp] });
     return card;

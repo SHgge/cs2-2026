@@ -523,6 +523,17 @@ html.scr-on body { background: #000; }
 .lc-next { margin-top: auto; padding-top: 14px; border-top: 2px solid var(--line); display: flex; flex-direction: column; gap: 4px; font-size: 34px; line-height: 1.15; }
 .lc-next b { font-size: 28px; color: var(--muted); text-transform: uppercase; letter-spacing: 2px; }
 .lc-empty { font-size: 40px; color: var(--muted); }
+/* газрын зураг (удирдамж 02 §7.9): шийдэгдсэн нь шар хүрээтэй, хасалт явагдаж байвал тасархай хүрээ */
+.lc-map {
+  display: flex; align-items: baseline; justify-content: center; flex-wrap: wrap; gap: 0 16px; padding: 3px 16px;
+  background: rgba(245, 165, 36, .12); border: 2px solid rgba(245, 165, 36, .6);
+}
+.lc-map span { font-size: 30px; color: var(--muted); text-transform: uppercase; letter-spacing: 2px; }
+.lc-map b { font-size: 46px; line-height: 1; color: var(--amber); text-transform: uppercase; letter-spacing: 1px; }
+.lc-map.prog { background: transparent; border-style: dashed; border-color: var(--line2); }
+.lc-map.prog span { font-size: 34px; line-height: 1.3; color: var(--text); text-transform: none; letter-spacing: 0; }
+.lc-map.prog b { font-size: 34px; color: var(--amber2); letter-spacing: 0; }
+.lc.has-map .lc-next { flex-direction: row; flex-wrap: wrap; align-items: baseline; gap: 0 16px; }   /* газрын зурагтай картад «Дараа» нэг мөрөнд — слайд багтана */
 
 /* ---------- standings ---------- */
 .s-standings { gap: 18px; }

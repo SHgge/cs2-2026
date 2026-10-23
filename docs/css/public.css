@@ -47,6 +47,16 @@ body.fullscreen.pub-idle, body.fullscreen.pub-idle * { cursor: none !important; 
   border-radius: 8px; padding: 2px 10px; text-align: center; max-width: 9em; line-height: 1.35;
 }
 .pm-vs { color: var(--muted); font-weight: 700; padding: 0 4px; }
+/* газрын зургийн хасалт (удирдамж 02 §7.9): хассан нь зурсан, жижиг; шийдэгдсэн нь тод chip */
+.pm-veto {
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; margin-top: 6px; padding-top: 5px;
+  border-top: 1px dashed var(--line); font-size: .8rem; line-height: 1.35; color: var(--muted);
+}
+.pm-map { background: var(--navy); color: #fff; border-radius: 999px; padding: 1px 10px; font-size: .88rem; }
+.pm-map b { font-weight: 800; }
+.pm-vstep { font-weight: 700; color: var(--navy-2); }
+.pm-bans { display: inline-flex; flex-wrap: wrap; align-items: baseline; gap: 0 7px; }
+.pm-bans s { text-decoration-color: var(--err); text-decoration-thickness: 1.5px; }
 
 /* ---------- хуваарь ---------- */
 .sc-tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 12px 0; }
@@ -527,6 +537,42 @@ body.fullscreen a { color: #93C5FD; }
 .tv-tick > span + span::before { content: "•"; margin-right: 1.4em; color: #475569; }
 .tv-ann { font-weight: 700; color: #fff; }
 .tv-ann.warn { color: #FDE68A; }
+/* ТВ: газрын зургийн хасалт (удирдамж 02 §7.9) — станцын мөрөнд газрын зураг, эргэлтэд «Газрын зургийн хасалт» самбар */
+.tv-meta { display: flex; align-items: baseline; flex-wrap: wrap; gap: .2em .9em; }
+.tv-mapc { display: inline-flex; align-items: baseline; gap: .4em; font-size: 1.3em; font-weight: 800; color: #FCD34D; }
+.tv-mapc small { font-size: .62em; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--dk-muted); }
+.tv-mapc.prog { font-size: 1em; font-weight: 700; color: #FDE68A; }
+.tv-next .tv-mapc { font-size: 1.15em; }
+.tv-vetos { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.4em; }
+.tv-vetos.one { grid-template-columns: minmax(0, 1fr); }
+.tv-vb { min-width: 0; display: flex; flex-direction: column; gap: .35em; }
+.tv-vb-h { display: flex; align-items: center; flex-wrap: wrap; gap: .3em .7em; font-size: 1.1em; }
+.tv-vb-h > b { font-size: 1.3em; }
+.tv-vb-h .tv-nmatch { flex: 0 1 auto; font-size: 1.2em; }
+.tv-vb.empty p { color: var(--dk-muted); font-size: 1.4em; margin: .6em 0; }
+.tv-vb-st { font-size: 1.75em; font-weight: 700; line-height: 1.15; }
+.tv-vb-st b { color: var(--g-d, #FCD34D); }
+.tv-vb-st.done { display: flex; align-items: baseline; flex-wrap: wrap; gap: 0 .5em; }
+.tv-vb-st.done small { font-size: .6em; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: var(--dk-muted); }
+.tv-vb-st.done b { font-size: 1.3em; line-height: 1; color: #FCD34D; }
+.tv-maps { display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: .45em; }
+.tv-map {
+  grid-column: span 2; min-width: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  text-align: center; padding: .2em .3em .3em; border-radius: 12px; background: var(--dk-panel-2); border: 2px solid #3B4B6B;
+}
+.tv-map:nth-child(5):nth-last-child(3) { grid-column: 2 / span 2; }   /* 7 газрын зураг: 4 + 3, доод мөр голдоо */
+.tv-map b { font-size: 2em; line-height: 1.12; white-space: nowrap; }
+.tv-map span { font-size: 1em; font-weight: 700; line-height: 1.25; color: var(--dk-muted); max-width: 100%; }
+.tv-map span.long { font-size: .85em; }
+.tv-map.ban {
+  border-color: #5B2424;
+  background: linear-gradient(to top right, transparent calc(50% - 2px), rgba(248, 113, 113, .5) calc(50% - 2px),
+    rgba(248, 113, 113, .5) calc(50% + 2px), transparent calc(50% + 2px)), #0E1628;
+}
+.tv-map.ban b { color: #7C8AA5; text-decoration: line-through; text-decoration-color: #F87171; text-decoration-thickness: .09em; }
+.tv-map.ban span { color: #FCA5A5; }
+.tv-map.pick { background: #FCD34D; border-color: #FEF3C7; color: #111827; box-shadow: 0 0 0 .25em rgba(252, 211, 77, .28); }
+.tv-map.pick span { color: #111827; text-transform: uppercase; letter-spacing: .05em; }
 /* ТВ дээрх хэсэг, схем (бараан) */
 .tv .gp-card { background: var(--dk-panel-2); border-color: var(--dk-line); border-top-color: var(--g); box-shadow: none; color: #fff; padding: .5em .6em; }
 .tv .gp-title { color: var(--g-d); font-size: 1.15em; }
@@ -551,7 +597,7 @@ body.fullscreen a { color: #93C5FD; }
 .tv .bk-champ-p { display: none; }
 @media (max-width: 900px) {
   .tv { font-size: 15px; }
-  .tv-stations, .tv-groups { grid-template-columns: 1fr; }
+  .tv-stations, .tv-groups, .tv-vetos { grid-template-columns: 1fr; }
 }
 @media (max-width: 600px) {   /* утсаар: нэр нэг мөрөнд, цаг доор баруун талд (давхцахгүй) */
   .tv-top { flex-wrap: wrap; row-gap: .3em; }
@@ -561,6 +607,9 @@ body.fullscreen a { color: #93C5FD; }
   .tv-clock { margin-left: auto; }
   .tv-clock b { font-size: 2.4em; }
   .tv-match .tv-team.long { font-size: min(2.1em, 9vw); }   /* «Багш нарын баг» keeps whole words at 320 px */
+  .tv-maps { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .tv-map, .tv-map:nth-child(5):nth-last-child(3) { grid-column: auto; }
+  .tv-map b { font-size: 1.3em; }
 }
 
 /* ---------- OBS доод мөр (?overlay=1) ---------- */

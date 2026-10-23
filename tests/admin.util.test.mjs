@@ -98,9 +98,14 @@ import { vault } from '../docs/js/admin/vault.js';
 
 const root = new URL('../', import.meta.url);
 const sql08 = readFileSync(new URL('supabase/migrations/08_admin_api.sql', root), 'utf8');
+// The dispatcher as last (re)defined by the migrations (08, then 13_map_veto, …).
+const migDir = new URL('supabase/migrations/', root);
+const dispatcherSql = readdirSync(migDir).filter((f) => f.endsWith('.sql')).sort()
+  .map((f) => readFileSync(new URL(f, migDir), 'utf8'))
+  .filter((s) => s.includes('function cs2_api.admin(')).pop();
 
 test('every admin action the UI calls exists in the cs2_admin dispatcher', () => {
-  const served = new Set([...sql08.matchAll(/^\s*when '([a-z_]+)'\s+then return/gm)].map((m) => m[1]));
+  const served = new Set([...dispatcherSql.matchAll(/^\s*when '([a-z_]+)'\s+then return/gm)].map((m) => m[1]));
   assert.ok(served.has('overview') && served.has('purge') && served.size >= 25, `dispatcher parsed: ${served.size}`);
   const dir = new URL('docs/js/admin/', root);
   const files = [...readdirSync(dir).map((f) => new URL(f, dir)), new URL('docs/js/pages/admin.js', root)];

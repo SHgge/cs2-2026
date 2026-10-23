@@ -1,7 +1,7 @@
 // «Сургуулийн аварга – CS2 2026» — тэмцээний логик (CONTRACT §3).
 // Pure ES module: no DOM, no dependencies besides ./event.js; runs in browsers and Node >= 22.
 // Works only with team ids/codes, scores and times — never with player data.
-import { GROUPS, GROUP_LABEL, TEAMS, DRAW_ORDER, MATCHES } from './event.js';
+import { GROUPS, GROUP_LABEL, TEAMS, DRAW_ORDER, MATCHES, MAPS } from './event.js';
 
 /**
  * @typedef {object} Match  A match as returned by resolveMatches(): event.js fields + live fields from the state.
@@ -606,4 +606,64 @@ export function teamSchedule(state, teamId, options) {
   const id = Number(teamId);
   if (teamId == null || teamId === '' || !Number.isFinite(id)) return [];
   return resolveMatches(state, options).filter((m) => m.team_a === id || m.team_b === id).sort(byTime);
+}
+
+// ---------------------------------------------------------------- map veto (regulation 02 §7.9, SPEC §3)
+
+const MAP_BY_KEY = new Map(MAPS.map((x) => [x.key, x]));
+
+/**
+ * Map pool keys in display order: state.settings.map_pool when it is a list of ≥ 3 known keys, else event.js MAPS.
+ * @param {object|null} state
+ * @returns {string[]}
+ */
+export function mapPool(state) {
+  const p = state && state.settings && state.settings.map_pool;
+  if (Array.isArray(p)) {
+    const keys = [...new Set(p.filter((k) => typeof k === 'string' && MAP_BY_KEY.has(k)))];
+    if (keys.length >= 3) return keys;
+  }
+  return MAPS.map((x) => x.key);
+}
+
+/**
+ * Map metadata by key: {key, name, id}; unknown keys fall back to {key, name: key, id: 'de_' + key}.
+ * @param {string} key
+ * @returns {{key:string, name:string, id:string}}
+ */
+export function mapInfo(key) {
+  return MAP_BY_KEY.get(key) || { key: String(key), name: String(key), id: `de_${key}` };
+}
+
+const otherSide = (s) => (s === 'a' ? 'b' : 'a');
+
+/**
+ * Veto state of a match. Bans alternate first, other, first, … (3 + 3 with 7 maps); the one map left is played.
+ * first: m.veto_first, else 'a' for group matches (the team listed first bans first); knockout: null until the
+ * coin toss is entered. steps: valid bans in order [{side, map}]; next: whose turn ({side, step}) or null when done
+ * or first is missing. Never throws.
+ * @param {object|null} m  match (state / resolveMatches / referee view)
+ * @param {string[]} [pool]  mapPool(state)
+ * @returns {{first:'a'|'b'|null, coin:boolean, steps:{side:'a'|'b', map:string}[], banned:string[],
+ *   remaining:string[], total:number, done:boolean, map:string|null, next:{side:'a'|'b', step:number}|null,
+ *   started:boolean, needsFirst:boolean}}
+ */
+export function vetoState(m, pool) {
+  const keys = Array.isArray(pool) && pool.length >= 2 ? pool : MAPS.map((x) => x.key);
+  const first = m && (m.veto_first === 'a' || m.veto_first === 'b') ? m.veto_first : (m && m.stage === 'group' ? 'a' : null);
+  const steps = [];
+  const seen = new Set();
+  for (const s of (m && Array.isArray(m.veto) ? m.veto : [])) {
+    if (!s || (s.side !== 'a' && s.side !== 'b') || !keys.includes(s.map) || seen.has(s.map)) continue;
+    if (steps.length >= keys.length - 1) break;
+    seen.add(s.map);
+    steps.push({ side: s.side, map: s.map });
+  }
+  const remaining = keys.filter((k) => !seen.has(k));
+  const done = remaining.length === 1;
+  const next = !done && first ? { side: steps.length % 2 === 0 ? first : otherSide(first), step: steps.length } : null;
+  return {
+    first, coin: !!(m && m.veto_coin), steps, banned: steps.map((s) => s.map), remaining, total: keys.length - 1,
+    done, map: done ? remaining[0] : null, next, started: steps.length > 0, needsFirst: !first,
+  };
 }

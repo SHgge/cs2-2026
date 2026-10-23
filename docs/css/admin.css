@@ -139,7 +139,7 @@ details.adm-sec > summary { font-size: 1.05rem; }
 
 /* ---- results ---- */
 .adm-matches { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 12px; }
-.adm-match { display: grid; gap: 8px; align-content: start; background: #fff; border: 1px solid var(--line); border-radius: var(--radius); padding: 12px; box-shadow: var(--shadow); }
+.adm-match { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; align-content: start; min-width: 0; background: #fff; border: 1px solid var(--line); border-radius: var(--radius); padding: 12px; box-shadow: var(--shadow); }
 .adm-match.st-live { border-left: 6px solid var(--warn); }
 .adm-match.st-reported { border-left: 6px solid var(--gold); }
 .adm-match.st-final { border-left: 6px solid var(--ok); }
@@ -148,7 +148,7 @@ details.adm-sec > summary { font-size: 1.05rem; }
 .adm-tname.right { text-align: right; }
 .adm-score { text-align: center; font-size: 1.25rem; font-weight: 700; padding: 6px 4px; }
 .adm-colon { font-weight: 800; }
-.adm-match select { width: auto; flex: 1 1 200px; }
+.adm-match select { width: auto; flex: 1 1 200px; max-width: 100%; }
 .adm-match .field-error:empty { display: none; }
 .adm-move { margin: 0; padding: 0 10px; }
 .adm-move > summary { min-height: 40px; padding: 8px 0; font-size: .9rem; }
@@ -162,6 +162,40 @@ details.adm-sec > summary { font-size: 1.05rem; }
 .adm-lot h4 { margin: 0 0 6px; }
 .adm-lot .btn { margin-top: 8px; }
 .adm-podium { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; font-size: 1.05rem; }
+
+/* ---- map veto (results card, admin/veto.js) ---- */
+.adm-veto { margin: 0; padding: 0 10px; background: #F8FAFC; }
+.adm-veto.is-live { border-color: #FCD34D; background: #FFFBEB; }
+.adm-veto.is-done { border-color: #86EFAC; background: #F0FDF4; }
+.adm-veto > summary { min-height: 40px; padding: 8px 0; font-size: .92rem; line-height: 1.35; }
+.adm-veto-k { color: var(--muted); font-weight: 600; }
+.adm-veto-v.warn { color: var(--warn); }
+.adm-veto-v.ok { color: var(--ok); }
+.adm-veto-d { color: var(--muted); font-weight: 400; }
+.adm-veto-body { display: grid; gap: 8px; padding-bottom: 10px; }
+.adm-veto-body p { margin: 0; }
+.adm-veto-turn { font-size: 1.02rem; padding: 6px 10px; border-radius: 8px; background: #fff; border: 1px solid var(--line); }
+.adm-maps { display: grid; grid-template-columns: repeat(auto-fill, minmax(86px, 1fr)); gap: 6px; }
+.adm-map {
+  display: grid; align-content: center; justify-items: center; min-height: 52px; padding: 4px 6px; border-radius: 10px;
+  border: 1px solid #CBD5E1; background: #fff; color: var(--navy); font: inherit; font-weight: 700; line-height: 1.2; text-align: center; cursor: pointer;
+}
+.adm-map:hover:not(:disabled) { border-color: var(--navy); }
+.adm-map[aria-pressed="true"] { background: var(--navy); border-color: var(--navy); color: #fff; box-shadow: 0 0 0 3px #CBD5E1; }
+.adm-map:disabled { cursor: default; }
+.adm-map:disabled:not(.is-banned):not(.is-pick) { opacity: .55; }
+.adm-map.is-banned { background: #F1F5F9; border-style: dashed; color: var(--muted); }
+.adm-map.is-banned .adm-map-n { text-decoration: line-through; text-decoration-thickness: 2px; }
+.adm-map.is-pick { background: var(--ok); border-color: var(--ok); color: #fff; }
+.adm-map-s { font-size: .74rem; font-weight: 600; overflow-wrap: anywhere; }
+.adm-veto-coin, .adm-veto-confirm, .adm-veto-act { gap: 6px; }
+.adm-veto-act { padding-top: 6px; border-top: 1px dashed var(--line); }
+.adm-veto-done { display: grid; gap: 6px; padding: 8px 10px; border-radius: 10px; background: var(--ok-l); }
+.adm-veto-cmd { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.adm-veto-cmd code { flex: 1 1 auto; padding: 8px 10px; border-radius: 8px; background: #0F172A; color: #E2E8F0; font-size: .95rem; overflow-wrap: anywhere; user-select: all; }
+.adm-veto-cmd.is-alt code { background: #fff; color: var(--navy); border: 1px solid #CBD5E1; font-size: .88rem; }
+.btn.adm-btn-danger { color: var(--err); border-color: #FCA5A5; }
+.adm-veto-off { font-weight: 600; }
 
 /* ---- announcements, settings, audit ---- */
 .adm-anns { list-style: none; padding: 0; margin: 12px 0 0; display: grid; gap: 8px; }
@@ -241,13 +275,14 @@ details.adm-sec > summary { font-size: 1.05rem; }
 .pr-pin-warn { grid-area: warn; align-self: start; font-size: 10.5pt; font-weight: 800; color: #B91C1C; }
 .pr-pin-note { grid-area: note; margin: .6mm 0 0; font-size: 8pt; line-height: 1.3; color: #374151; }
 
-/* referee slip (94.5 × 135 mm) */
-.pr-ref { padding: 5mm 6mm; display: flex; flex-direction: column; align-items: center; text-align: center; gap: 2.2mm; }
+/* referee slip (94.5 × 135 mm; .pr-cell clips): QR 46 mm + gap 1.8 mm keep the warning inside with 4 steps; a 2–3-line
+   label shrinks the QR (flex, min 34 mm; the SVG stays square) instead of pushing the warning out of the cell */
+.pr-ref { padding: 5mm 6mm; display: flex; flex-direction: column; align-items: center; text-align: center; gap: 1.8mm; }
 .pr-ref .pr-brand { align-self: stretch; text-align: left; }
 .pr-ref .pr-logo { width: 9mm; height: 9mm; }
 .pr-ref-label { font-size: 20pt; font-weight: 800; color: #1F2A44; line-height: 1.15; }
 .pr-ref-station { font-size: 11pt; font-weight: 600; }
-.pr-qr-ref { width: 54mm; height: 54mm; }
+.pr-qr-ref { width: 46mm; height: 46mm; min-height: 34mm; }
 .pr-ref-valid { font-size: 10pt; font-weight: 700; }
 .pr-ref .pr-steps { text-align: left; }
 

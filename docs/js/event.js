@@ -68,6 +68,20 @@ export const GROUP_TEXT_COLOR = deepFreeze({ A: '#2563EB', B: '#15803D', V: '#C2
 /** Station display labels. */
 export const STATION_LABEL = deepFreeze({ A: 'А станц', B: 'Б станц' });
 
+/**
+ * Valve Active Duty map pool (since 2026-07: Cache replaced Overpass; regulation 02 §7.9) — key (as stored in
+ * cs2.settings.map_pool and cs2.matches.veto/map), display name, server map id. The state's settings.map_pool wins.
+ */
+export const MAPS = deepFreeze([
+  { key: 'ancient', name: 'Ancient', id: 'de_ancient' },
+  { key: 'anubis', name: 'Anubis', id: 'de_anubis' },
+  { key: 'cache', name: 'Cache', id: 'de_cache' },
+  { key: 'dust2', name: 'Dust II', id: 'de_dust2' },
+  { key: 'inferno', name: 'Inferno', id: 'de_inferno' },
+  { key: 'mirage', name: 'Mirage', id: 'de_mirage' },
+  { key: 'nuke', name: 'Nuke', id: 'de_nuke' },
+]);
+
 /** Stage display labels (group, quarterfinal, semifinal, final, 3rd-place match). */
 export const STAGE_LABEL = deepFreeze({
   group: 'Хэсгийн шат', qf: 'Шөвгийн 8', sf: 'Шөвгийн 4', final: 'Финал', third: '3-р байрын тоглолт',

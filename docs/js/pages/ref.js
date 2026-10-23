@@ -1,11 +1,13 @@
 // Шүүгчийн хуудас — #/ref/<token>
 // Станцын тоглолтууд, «Эхэлсэн», оноо (±), техникийн ялагдал, нэмэлт цаг (OT), «… — Зөв үү?» баталгаа,
 // интернэт тасарвал localStorage-ийн дараалал. Ерөнхий шүүгч (station null) 'final' хийнэ.
+// Газрын зургийн хасалт (журам 02 §7.9): 7 газрын зураг, ээлжлэн 3 + 3 хасна, үлдсэн нэг дээр тоглоно — зөвхөн онлайн,
+// нэг удаад нэг хүсэлт (дараалалд орохгүй).
 // API-аас ирсэн өгөгдлийг ЗӨВХӨН ui.h (textContent)-ээр DOM-д оруулна.
-import { refGet, refReport, errorText } from '../api.js';
-import { h, fmtTime, fmtDate, toast, teamName, stationLabel } from '../ui.js';
+import { refGet, refReport, refVeto, errorText } from '../api.js';
+import { h, fmtTime, fmtDate, toast, teamName, stationLabel, copyText } from '../ui.js';
 import { store } from '../store.js';
-import { validScore, resolveMatches, fmtScore, srcLabel as logicSrcLabel } from '../logic.js';
+import { validScore, resolveMatches, fmtScore, srcLabel as logicSrcLabel, mapPool, mapInfo, vetoState } from '../logic.js';
 import { MATCHES, GROUP_LABEL, EVENT_NAME } from '../event.js';
 
 const TOKEN_KEY = 'cs2.ref.token';
@@ -151,9 +153,99 @@ export function isTransient(err) {
   return msg === 'network' || /^http_(5\d\d|408|425|429)$/.test(msg);
 }
 
+/* ---------- map veto */
+const VETO_KEYS = ['veto_first', 'veto_coin', 'veto', 'map'];
+export const VETO_OFF_TEXT = 'Газрын зургийн систем хараахан идэвхжээгүй байна. Зохион байгуулагчид хэлнэ үү.';
+
+/** RPC байхгүй (DB шилжилт хийгдээгүй): PostgREST 404 → api.rpc 'http_404' шиднэ. */
+export function isMissingRpc(err) { return String((err && err.message) || '') === 'http_404'; }
+
+/** Шүүгч энэ тоглолтын хасалтыг хийж чадах уу: станцын шүүгч — өөрийн станц, 'scheduled'|'live'; ерөнхий — 'final'-аас бусад. */
+export function vetoAccess(m, ref) {
+  if (!m || m.status === 'final') return { can: false, chief: false, reason: 'final' };
+  const chief = !!(ref && ref.chief);
+  if (!chief && ref && ref.station && m.station && m.station !== ref.station) return { can: false, chief, reason: 'other_station' };
+  if (!chief && m.status !== 'scheduled' && m.status !== 'live') return { can: false, chief, reason: 'already_reported' };
+  return { can: true, chief, reason: null };
+}
+
+/** Серверийн тоглолтоос зөвхөн хасалтын талбарууд (хуучин DB-д байхгүй бол хоосон объект). */
+export function vetoFields(src) {
+  const o = {};
+  for (const k of VETO_KEYS) if (src && typeof src === 'object' && k in src) o[k] = src[k];
+  return o;
+}
+
+/** №no тоглолтод хасалтын талбаруудыг нэгтгэсэн шинэ жагсаалт. */
+export function mergeVeto(matches, no, fields) {
+  return (matches || []).map((m) => (m && m.no === no ? { ...m, ...fields } : m));
+}
+
+/** Хавтан бүр: {key, name, ban:{side, order}|null, play} — pool-ийн дарааллаар. */
+export function vetoTiles(v, pool) {
+  const by = new Map(((v && v.steps) || []).map((s, i) => [s.map, { side: s.side, order: i + 1 }]));
+  const keys = Array.isArray(pool) && pool.length ? pool : [...((v && v.banned) || []), ...((v && v.remaining) || [])];
+  return keys.map((key) => ({ key, name: mapInfo(key).name, ban: by.get(key) || null, play: !!(v && v.done && v.map === key) }));
+}
+
+/** «Багш нарын баг» → «Багш нар» (хавтан дээрх богино нэр). */
+export function shortTeam(name) { return String(name || '').replace(/ нарын баг$/u, ' нар'); }
+
+/** Серверийн консолын команд: «changelevel de_mirage». */
+export function serverCmd(key) { return `changelevel ${mapInfo(key).id}`; }
+
+/** MatchZy match JSON-ий мөр: «"maplist": ["de_mirage"]» (техникийн ахлагч matchzy_loadmatch-аас өмнө засна, admin-тай ижил). */
+export function maplistCmd(key) { return `"maplist": ["${mapInfo(key).id}"]`; }
+
+/**
+ * «Хасах» хүсэлт: step (харсан хасалтын тоо) + side (дэлгэц дээр «… хасна» гэж харуулсан тал). Зоосыг өөр
+ * төхөөрөмж сольсон бол сервер 'stale' буцаана — хасалт нөгөө багийнх болж бичигдэхгүй.
+ */
+export function vetoBanArgs(v, map) { return { map, step: v.steps.length, side: v.next ? v.next.side : null }; }
+
+/**
+ * Дууссан хасалтыг товч (газрын зураг + команд) харуулах уу. Явагдаж буй хасалт — үгүй (бүтэн самбар).
+ * Дууссан — анхдагчаар товч, харин энэ тоглолтын ижил төлөвт хадгалсан нээлттэй харагдац байвал бүтэн
+ * (энэ төхөөрөмжийн сүүлийн хасалтын дараа эсвэл «Хасалтыг харах»). view = {no, status, open}.
+ */
+export function vetoCollapsed(v, m, view) {
+  if (!v || !v.done) return false;
+  return !(view && m && view.no === m.no && view.status === m.status && view.open);
+}
+
+/** cs2_ref_veto алдааны монгол тайлбар. */
+export function vetoErrorText(r) {
+  const code = r && r.error;
+  if (code === 'forbidden') {
+    const reason = {
+      final: 'Дүн баталгаажсан тул газрын зургийг өөрчлөхгүй.',
+      already_reported: 'Оноо илгээсэн тул зөвхөн ерөнхий шүүгч өөрчилнө.',
+      group_fixed: 'Хэсгийн шатанд эхэнд бичигдсэн баг эхэлж хасна.',
+      veto_started: 'Хасалт эхэлсэн тул зоосыг өөрчлөхгүй.',
+      first_set: 'Зоосыг аль хэдийн шидсэн байна. Буруу бол ерөнхий шүүгч шинээр эхлүүлнэ.',
+      chief_only: 'Үүнийг зөвхөн ерөнхий шүүгч хийнэ.',
+      first_missing: 'Эхлээд зоос шидэж, хэн эхэлж хасахыг шийднэ үү.',
+      veto_done: 'Хасалт аль хэдийн дууссан.',
+      veto_empty: 'Буцаах хасалт алга.',
+      other_station: 'Энэ тоглолт өөр станцынх.',
+    }[r.reason];
+    return reason || 'Энэ үйлдлийг хийх эрхгүй.';
+  }
+  if (code === 'validation') {
+    const e = (Array.isArray(r.errors) && r.errors[0]) || {};
+    if (e.field === 'map' && e.code === 'taken') return 'Энэ газрын зураг аль хэдийн хасагдсан.';
+    if (e.field === 'map') return 'Газрын зураг буруу байна.';
+    if (e.field === 'side') return 'Эхлэх баг буруу байна.';
+    return 'Мэдээлэл буруу байна. Ерөнхий шүүгчид хэлнэ үү.';
+  }
+  if (code === 'not_found') return 'Тоглолт олдсонгүй.';
+  return errorText(r);
+}
+
 export const _test = {
   cleanToken, tokenTag, isKnockout, isDone, statusKey, sortMatches, pickCurrent, stageLabel, srcLabel, sourceText, scoreHint,
   checkScore, validEntry, enqueueEntry, applyQueue, isTransient,
+  isMissingRpc, vetoAccess, vetoFields, mergeVeto, vetoTiles, shortTeam, serverCmd, maplistCmd, vetoBanArgs, vetoCollapsed, vetoErrorText,
 };
 
 /* ================================================================== storage & modal */
@@ -231,6 +323,9 @@ function createRefPage(root, params) {
     dead: false, token: null, tag: null, ref: null, sel: null, filter: 'all', edits: new Map(), q: [], qVolatile: false,
     failures: [], resolved: new Map(), resolvedFp: '', names: {}, busy: false, flushing: false, loading: false,
     netError: false, fromCache: false, timers: {}, unsub: null, fp: { list: '', detail: '' }, offset: 0,
+    // хасалт: илгээж буй эсэх, сонгосон хавтан {no, map, step}, RPC байхгүй, сүүлийн амжилттай хариу (no → {at, fields}), дахин ачаалах,
+    // дууссан хасалтын харагдац {no, status, open} (өөр тоглолт эсвэл төлөв өөрчлөгдвөл анхдагч — товч)
+    vetoBusy: false, vetoSel: null, vetoOff: false, vetoPatch: new Map(), again: false, vetoView: null,
   };
   const el = { quick: {}, score: {} };
   const prevTitle = document.title;
@@ -292,11 +387,13 @@ function createRefPage(root, params) {
   async function load(background, manual) {
     if (S.loading || S.dead || !S.token) return;
     S.loading = true;
+    const t0 = Date.now();
     let r = null;
     let err = null;
     try { r = await refGet(S.token); } catch (x) { err = x; }
     S.loading = false;
     if (S.dead) return;
+    if (S.again) { S.again = false; setTimeout(() => load(true), 0); }   // хасалтын дараа шинэ төлөв хэрэгтэй
     if (err) {
       S.netError = true;
       if (!S.ref) renderFatal('network');
@@ -311,6 +408,7 @@ function createRefPage(root, params) {
     }
     S.netError = false;
     S.fromCache = false;
+    patchVeto(r, t0);
     S.ref = r;
     if (r.now) { const t = Date.parse(r.now); if (!Number.isNaN(t)) S.offset = t - Date.now(); }
     updateResolved();
@@ -319,6 +417,16 @@ function createRefPage(root, params) {
     renderAll(!!manual);
     if (manual) toast('Шинэчлэгдлээ', 'ok', 1500);
   }
+
+  /** Хасалтаас өмнө эхэлсэн ачаалал хуучин төлөв авчирч болно → сүүлийн амжилттай хасалтын хариуг давхарлана. */
+  function patchVeto(r, t0) {
+    for (const [no, p] of S.vetoPatch) {
+      if (p.at <= t0) { S.vetoPatch.delete(no); continue; }
+      const x = Array.isArray(r.matches) ? r.matches.find((mm) => mm && mm.no === no) : null;
+      if (x) Object.assign(x, p.fields);
+    }
+  }
+  function reload() { if (S.loading) S.again = true; else load(true); }
 
   /** Багуудыг logic-оор тодорхойлно: нийтийн төлөв + энэ шүүгчийн шүүлтгүй (120 с хүлээлтгүй) дүнгүүд. */
   function updateResolved() {
@@ -661,7 +769,7 @@ function createRefPage(root, params) {
 
   function renderDetail(m, list) {
     empty(el.detail);
-    el.hint = null; el.send = null; el.finalBtn = null; el.ot = null; el.late = null;
+    el.hint = null; el.send = null; el.finalBtn = null; el.ot = null; el.late = null; el.veto = null;
     el.quick = {}; el.score = {};
     if (!m) { el.detail.append(h('p', { class: 'muted' }, 'Тоглолт сонгоно уу.')); return; }
     const e = editFor(m);
@@ -690,6 +798,7 @@ function createRefPage(root, params) {
       add(el.detail,
         h('div', { class: 'r-final' },
           h('div', { class: 'r-final-teams' }, h('span', {}, A.name), h('b', { class: 'r-final-score' }, scoreText(m) || '—'), h('span', {}, B.name)),
+          m.map ? h('p', { class: 'r-final-map' }, `Газрын зураг: ${mapInfo(m.map).name}`) : null,
           h('p', { class: 'small muted' }, 'Дүн баталгаажсан. Өөрчлөх бол зохион байгуулагчид хандана уу.')),
         next ? h('button', { type: 'button', class: 'btn secondary block r-big', onclick: () => select(next.no) }, 'Дараагийн тоглолт →') : null);
       return;
@@ -698,6 +807,9 @@ function createRefPage(root, params) {
     if (!A.known || !B.known) {
       el.detail.append(h('p', { class: 'card warn r-unknown' }, 'Багууд хараахан тодорхойгүй. Ерөнхий шүүгчээс тодруулна уу.'));
     }
+    el.veto = h('section', { class: 'r-veto', 'aria-labelledby': 'r-veto-h' });
+    fillVeto(el.veto, m);
+    el.detail.append(el.veto);
     if (key === 'scheduled') {
       el.detail.append(h('button', { type: 'button', class: 'btn block r-big r-live', disabled: S.busy, onclick: () => send({ no: m.no, action: 'live', a: null, b: null, forfeit: null, ta: null, tb: null }) }, '▶ Эхэлсэн'));
     }
@@ -816,6 +928,288 @@ function createRefPage(root, params) {
     if (code === 'bad_token' || code === 'expired') { invalidate(code); return; }
     toast(`№${item.no}: ${reportErrorText(r)}`, 'err', 6000);
     renderAll(true);
+  }
+
+  /* ---------- map veto (зөвхөн онлайн, нэг удаад нэг хүсэлт; дараалалд орохгүй) ---------- */
+  function refreshVeto() {
+    if (!el.veto || !el.detail || !el.detail.contains(el.veto)) return;
+    const m = currentMatch();
+    if (m) fillVeto(el.veto, m);
+  }
+
+  function fillVeto(box, m) {
+    const act = document.activeElement;
+    const focusKey = act && box.contains(act) && act.dataset ? act.dataset.vk || null : null;
+    empty(box);
+    const pool = mapPool(store.get());
+    const v = vetoState(m, pool);
+    if (S.vetoView && (S.vetoView.no !== m.no || S.vetoView.status !== m.status)) S.vetoView = null;   // өөр тоглолт / төлөв өөрчлөгдсөн → анхдагч
+    const collapsed = vetoCollapsed(v, m, S.vetoView);
+    box.classList.toggle('done', v.done);
+    box.classList.toggle('compact', collapsed);
+    if (collapsed) vetoSummary(box, m, v); else vetoPanel(box, m, v, pool);
+    if (focusKey) {
+      const f = Array.from(box.querySelectorAll('[data-vk]')).find((b) => b.dataset.vk === focusKey);
+      if (f && !f.disabled) { try { f.focus({ preventScroll: true }); } catch (e) { /* ignore */ } }
+    }
+  }
+
+  /** Дууссан хасалт, товч: газрын зураг, команд + «Хуулах», «Хасалтыг харах» — тоглолтын үеэр онооны хэсэг дэлгэцэнд үлдэнэ. */
+  function vetoSummary(box, m, v) {
+    add(box,
+      h('h3', { class: 'r-veto-sum-h', id: 'r-veto-h' }, 'Газрын зураг: ', h('b', {}, mapInfo(v.map).name.toUpperCase())),
+      serverRows(m, v),
+      h('div', { class: 'r-veto-cmd' }, h('button', {
+        type: 'button', class: 'r-veto-more', 'data-vk': 'toggle', 'aria-expanded': 'false', onclick: () => setVetoOpen(m.no, true),
+      }, 'Хасалтыг харах', caret('▾'))),
+      m.status === 'scheduled' ? h('p', { class: 'r-veto-knife sm' }, 'Талыг хутганы раундаар сонгоно.') : null);
+  }
+
+  /**
+   * Серверийн мөрүүд зөвхөн тоглолт эхлэхээс өмнө (admin-тай ижил дараалал): MatchZy match JSON-ий maplist, эсвэл JSON
+   * ачаалсан бол консолын changelevel. Тоглолт эхэлсний дараа харуулахгүй — тоглолтын дундуур газрын зураг солигдохгүй.
+   */
+  function serverRows(m, v) {
+    if (m.status !== 'scheduled') return null;
+    return [
+      h('p', { class: 'small muted r-veto-cmd-l' }, 'Техникийн ахлагчид — match JSON-ий мөр:'),
+      cmdRow(maplistCmd(v.map)),
+      h('p', { class: 'small muted r-veto-cmd-l' }, 'JSON ачаалсан бол консолд (зөвхөн LIVE-аас өмнө):'),
+      cmdRow(serverCmd(v.map)),
+    ];
+  }
+
+  const caret = (c) => h('span', { class: 'r-veto-caret', 'aria-hidden': 'true' }, c);
+
+  function cmdRow(cmd, extra) {
+    return h('div', { class: 'r-veto-cmd' },
+      h('code', { class: 'r-veto-code' }, cmd),
+      h('button', { type: 'button', class: 'btn secondary r-veto-copy', 'aria-label': `Хуулах: ${cmd}`, onclick: () => copyText(cmd) }, 'Хуулах'),
+      extra);
+  }
+
+  /** «Хасалтыг харах» / «Хураах»: энэ тоглолтын одоогийн төлөвт хадгална (төлөв өөрчлөгдвөл анхдагч руу буцна). */
+  function setVetoOpen(no, open) {
+    const cur = currentMatch();
+    S.vetoView = { no, status: cur && cur.no === no ? cur.status : null, open };
+    refreshVeto();
+  }
+
+  /** Бүтэн самбар: явагдаж буй хасалт, эсвэл дэлгэсэн дууссан хасалт (хавтан, буцаах, шинээр эхлүүлэх). */
+  function vetoPanel(box, m, v, pool) {
+    const acc = vetoAccess(m, S.ref);
+    const busy = S.vetoBusy;
+    const ko = KO.has(m.stage);
+    const name = (s) => sideName(m, s);
+    const step = v.steps.length;
+    const s0 = S.vetoSel;
+    const sel = s0 && s0.no === m.no && s0.step === step && !v.done && v.remaining.includes(s0.map) ? s0.map : null;
+    const pickable = acc.can && !!v.next;
+
+    add(box, h('div', { class: 'r-veto-top' },
+      h('h3', { class: 'r-veto-h', id: 'r-veto-h' }, 'Газрын зураг'),
+      h('span', { class: 'chip r-veto-prog' }, `Хасалт ${step}/${v.total}`)));
+    if (S.vetoOff) box.append(h('p', { class: 'r-veto-off', role: 'alert' }, VETO_OFF_TEXT));
+
+    if (v.done) {
+      box.append(h('div', { class: 'r-veto-play' },
+        h('p', { class: 'r-veto-play-l' }, 'Тоглох газрын зураг:'),
+        h('p', { class: 'r-veto-play-map' }, mapInfo(v.map).name.toUpperCase()),
+        serverRows(m, v),
+        h('p', { class: 'r-veto-knife' }, 'Талыг хутганы раундаар сонгоно.')));
+    } else if (v.needsFirst) {
+      if (acc.can) {
+        box.append(h('div', { class: 'r-veto-coin' },
+          h('p', { class: 'r-veto-ask' }, 'Хэн эхэлж хасахыг зоосоор шийднэ'),
+          h('button', { type: 'button', class: 'btn gold block r-big', disabled: busy, onclick: () => confirmCoin(m) }, busy ? 'Илгээж байна…' : 'Зоос шидэх'),
+          h('p', { class: 'small muted r-veto-or' }, 'Зоосыг гараар шидсэн бол:'),
+          h('div', { class: 'r-veto-coin-row' }, ['a', 'b'].map((s) => h('button', {
+            type: 'button', class: 'btn secondary block r-big r-veto-side', disabled: busy, onclick: () => confirmFirst(m, s),
+          }, `${name(s)} эхэлнэ`)))));
+      } else box.append(h('p', { class: 'r-veto-ask' }, 'Зоос шидээгүй байна'));
+    } else {
+      box.append(h('p', { class: 'r-veto-turn', 'aria-live': 'polite' }, h('b', {}, name(v.next.side)), ' хасна'));
+    }
+    if (ko && v.first && !v.done) box.append(h('p', { class: 'r-veto-first' }, `Зоос${v.coin ? ' (систем)' : ''}: ${name(v.first)} эхэлж хасна`));
+    if (ko && v.first && !v.started && acc.can && !acc.chief) box.append(h('p', { class: 'small muted r-veto-note' }, 'Буруу бол ерөнхий шүүгч шинээр эхлүүлнэ.'));
+    if (!ko && !v.started) box.append(h('p', { class: 'r-veto-first' }, 'Эхэнд бичигдсэн баг эхэлж хасна. Ээлжлэн 3, 3 хасаад үлдсэнд тоглоно.'));
+
+    const grid = h('div', { class: 'r-veto-grid', role: 'group', 'aria-label': 'Газрын зургууд' });
+    for (const t of vetoTiles(v, pool)) {
+      const on = pickable && !t.ban && !t.play;
+      const isSel = t.key === sel;
+      const by = t.ban ? shortTeam(name(t.ban.side)) : '';
+      grid.append(h('button', {
+        type: 'button', class: `r-veto-tile${t.ban ? ' banned' : ''}${t.play ? ' play' : ''}${isSel ? ' sel' : ''}`,
+        'data-vk': t.key, disabled: !on || busy, 'aria-pressed': on ? String(isSel) : null,
+        'aria-label': t.ban ? `${t.name}: ${by} хассан (${t.ban.order}-р хасалт)` : t.play ? `${t.name}: тоглоно` : null,
+        onclick: on ? () => pickMap(m.no, t.key, step) : null,
+      },
+      h('span', { class: 'r-veto-name' }, t.name),
+      t.ban ? h('small', {}, `✕ ${by}`) : t.play ? h('small', {}, 'ТОГЛОНО') : isSel ? h('small', {}, 'Сонгосон') : null));
+    }
+    box.append(grid);
+
+    if (pickable) {
+      box.append(h('button', {
+        type: 'button', class: 'btn danger block r-big r-veto-go', disabled: busy || !sel,
+        onclick: () => {
+          if (!sel) return;
+          vetoSend(m.no, 'ban', vetoBanArgs(v, sel),
+            (r) => (r.match && r.match.map ? `Тоглох газрын зураг: ${mapInfo(r.match.map).name}` : `${mapInfo(sel).name} хасагдлаа.`));
+        },
+      }, busy ? 'Илгээж байна…' : sel ? `${mapInfo(sel).name} хасах` : 'Газрын зураг сонгоно уу'));
+    }
+    if (acc.can && (v.started || (acc.chief && ko && v.first))) {
+      box.append(h('div', { class: 'r-veto-tools' },
+        v.started ? h('button', { type: 'button', class: 'btn secondary r-veto-undo', disabled: busy, onclick: () => confirmUndo(m) }, '↶ Буцаах') : null,
+        acc.chief ? h('button', { type: 'button', class: 'btn secondary r-veto-reset', disabled: busy, onclick: () => confirmReset(m) }, 'Шинээр эхлүүлэх') : null));
+    }
+    if (acc.reason === 'already_reported') box.append(h('p', { class: 'small muted r-veto-note' }, 'Оноо илгээсэн тул газрын зургийг зөвхөн ерөнхий шүүгч өөрчилнө.'));
+    if (v.done) {
+      box.append(h('button', {
+        type: 'button', class: 'r-veto-more r-veto-less', 'data-vk': 'toggle', 'aria-expanded': 'true', onclick: () => setVetoOpen(m.no, false),
+      }, 'Хураах', caret('▴')));
+    }
+  }
+
+  /** 1-р товшилт сонгоно, 2-р товшилт (өөр хавтан) сонголтыг солино, ижил хавтан — болино. */
+  function pickMap(no, key, step) {
+    if (S.vetoBusy) return;
+    const p = S.vetoSel;
+    S.vetoSel = p && p.no === no && p.map === key && p.step === step ? null : { no, map: key, step };
+    refreshVeto();
+  }
+
+  const chiefNote = () => (S.ref && S.ref.chief ? null : h('p', { class: 'small' }, 'Дараа нь зөвхөн ерөнхий шүүгч өөрчилнө.'));
+  const vsLine = (m) => h('p', { class: 'small muted' }, `№${m.no} · ${sideName(m, 'a')} – ${sideName(m, 'b')}`);
+
+  function confirmCoin(m) {
+    const md = openModal({
+      title: 'Зоос шидэх',
+      className: 'r-confirm',
+      body: [h('p', {}, 'Систем санамсаргүйгээр хэн эхэлж хасахыг шийднэ.'), vsLine(m), chiefNote()],
+      actions: [
+        h('button', {
+          type: 'button', class: 'btn gold block r-big', 'data-autofocus': '',
+          onclick: async () => {
+            md.close();
+            const r = await vetoSend(m.no, 'first', { side: 'coin', step: 0 }, null);
+            const f = r && r.match && r.match.veto_first;
+            if (f !== 'a' && f !== 'b') return;
+            const res = openModal({
+              title: 'Зоосны дүн',
+              className: 'r-confirm',
+              body: [h('p', { class: 'r-confirm-line' }, `${sideName(m, f)} эхэлж хасна`), vsLine(m)],
+              actions: [h('button', { type: 'button', class: 'btn block r-big', 'data-autofocus': '', onclick: () => res.close() }, 'Ойлголоо')],
+            });
+          },
+        }, 'Тийм, шидэх'),
+        h('button', { type: 'button', class: 'btn secondary block r-big', onclick: () => md.close() }, 'Болих'),
+      ],
+    });
+  }
+
+  function confirmFirst(m, s) {
+    const who = sideName(m, s);
+    const md = openModal({
+      title: 'Эхэлж хасах баг',
+      className: 'r-confirm',
+      body: [h('p', { class: 'r-confirm-line' }, `${who} эхэлж хасна — Зөв үү?`), h('p', { class: 'small muted' }, 'Зоосыг гараар шидсэн.'), vsLine(m), chiefNote()],
+      actions: [
+        h('button', {
+          type: 'button', class: 'btn gold block r-big', 'data-autofocus': '',
+          onclick: () => { md.close(); vetoSend(m.no, 'first', { side: s, step: 0 }, () => `${who} эхэлж хасна.`); },
+        }, 'Тийм'),
+        h('button', { type: 'button', class: 'btn secondary block r-big', onclick: () => md.close() }, 'Үгүй'),
+      ],
+    });
+  }
+
+  function confirmUndo(m) {
+    const v = vetoState(m, mapPool(store.get()));
+    const last = v.steps[v.steps.length - 1];
+    if (!last) return;
+    const map = mapInfo(last.map).name;
+    const md = openModal({
+      title: 'Хасалтыг буцаах',
+      className: 'r-confirm',
+      body: [h('p', { class: 'r-confirm-line' }, `${map} · ${sideName(m, last.side)}`), h('p', { class: 'center' }, 'Сүүлийн хасалтыг буцаах уу?'), vsLine(m)],
+      actions: [
+        h('button', {
+          type: 'button', class: 'btn gold block r-big', 'data-autofocus': '',
+          onclick: () => { md.close(); vetoSend(m.no, 'undo', { step: v.steps.length }, () => `${map} буцаагдлаа.`); },
+        }, 'Тийм, буцаах'),
+        h('button', { type: 'button', class: 'btn secondary block r-big', onclick: () => md.close() }, 'Үгүй'),
+      ],
+    });
+  }
+
+  function confirmReset(m) {
+    const v = vetoState(m, mapPool(store.get()));
+    const md = openModal({
+      title: 'Шинээр эхлүүлэх',
+      className: 'r-confirm',
+      body: [
+        h('p', { class: 'r-confirm-sub' }, 'Бүх хасалт устана.'),
+        KO.has(m.stage) ? h('p', { class: 'center' }, 'Зоосны шийдвэр мөн устана.') : null,
+        vsLine(m),
+      ],
+      actions: [
+        h('button', {
+          type: 'button', class: 'btn danger block r-big',
+          onclick: () => { md.close(); vetoSend(m.no, 'reset', { step: v.steps.length }, () => 'Хасалтыг шинээр эхлүүллээ.'); },
+        }, 'Тийм, шинээр эхлүүлэх'),
+        h('button', { type: 'button', class: 'btn secondary block r-big', 'data-autofocus': '', onclick: () => md.close() }, 'Болих'),
+      ],
+    });
+  }
+
+  /** cs2_ref_veto: амжилттай бол хариуны тоглолтоос хасалтын талбаруудыг шууд нэгтгэнэ; бусад үед мэдэгдэл + шинэчлэл. */
+  async function vetoSend(no, action, opts, okText) {
+    if (!S.token || S.vetoBusy) return null;
+    S.vetoBusy = true;
+    refreshVeto();
+    let r = null;
+    let err = null;
+    try { r = await refVeto(S.token, no, action, opts); } catch (x) { err = x; }
+    S.vetoBusy = false;
+    if (S.dead) return null;
+    if (err) {
+      if (isMissingRpc(err)) { S.vetoOff = true; toast(VETO_OFF_TEXT, 'err', 8000); } else if (isTransient(err)) {
+        S.netError = true;
+        renderHead();
+        toast('Интернэт алга. Холболтоо шалгаад дахин оролдоно уу.', 'warn', 5000);
+      } else toast(`Илгээж чадсангүй (${err.message}).`, 'err', 6000);
+      refreshVeto();
+      return null;
+    }
+    if (r && r.ok) {
+      S.netError = false;
+      S.vetoOff = false;
+      S.vetoSel = null;
+      const fields = vetoFields(r.match);
+      if (Object.keys(fields).length && S.ref && Array.isArray(S.ref.matches)) {
+        S.vetoPatch.set(no, { at: Date.now(), fields });
+        S.ref.matches = mergeVeto(S.ref.matches, no, fields);
+        writeCache();
+      } else reload();
+      if (action === 'ban' && fields.map) {   // сүүлийн хасалт: дүнг бүтнээр нь харуулна (тоглолт эхлэх хүртэл / «Хураах» хүртэл)
+        const cur = effective().find((x) => x.no === no);
+        S.vetoView = { no, status: cur ? cur.status : null, open: true };
+      }
+      renderAll();
+      refreshVeto();
+      if (okText) toast(okText(r), 'ok', 4000);
+      return r;
+    }
+    const code = r && r.error;
+    if (code === 'bad_token' || code === 'expired') { invalidate(code); return null; }
+    S.vetoSel = null;
+    toast(vetoErrorText(r), code === 'stale' || (r && r.reason === 'first_set') ? 'warn' : 'err', 6000);
+    refreshVeto();
+    reload();   // stale / forbidden / taken → серверийн одоогийн төлөвийг харуулна
+    return null;
   }
 
   return { start, destroy };

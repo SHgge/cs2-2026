@@ -46,6 +46,10 @@ export const refReport = (token, no, action, scoreA = null, scoreB = null, forfe
     p_token: token, p_no: no, p_action: action, p_score_a: scoreA, p_score_b: scoreB,
     p_forfeit: forfeit, p_team_a: teamA, p_team_b: teamB,
   });
+/** Map veto on the referee's device (CONTRACT §4): action 'first' (side 'a'|'b'|'coin', knockout), 'ban' (map, step),
+ *  'undo' (step), 'reset' (chief only). step = number of bans the client saw — a stale tap fails with 'stale'. */
+export const refVeto = (token, no, action, { map = null, step = null, side = null } = {}) =>
+  rpc('cs2_ref_veto', { p_token: token, p_no: no, p_action: action, p_map: map, p_step: step, p_side: side });
 export const adminSetup = (code, label, secret) => rpc('cs2_admin_setup', { p_code: code, p_label: label, p_secret: secret });
 export const adminLogin = (label, secret) => rpc('cs2_admin_login', { p_label: label, p_secret: secret });
 export const adminLogout = (session) => rpc('cs2_admin_logout', { p_session: session });
@@ -75,6 +79,7 @@ export function errorText(r) {
     bad_commit: 'Нууц тоо commit-тэй таарахгүй байна.',
     already_setup: 'Админ аль хэдийн тохируулагдсан.',
     bad_code: 'Тохиргооны код буруу.',
+    stale: 'Өөр төхөөрөмжөөс өөрчлөгдсөн байна. Шинэчилсэн төлөвийг харна уу.',
   };
   return map[code] || 'Алдаа гарлаа. Дахин оролдоно уу.';
 }
