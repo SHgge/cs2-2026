@@ -18,7 +18,7 @@ import {
 import { groupStandings } from '../logic.js';
 import {
   makeClock, mergedMatches, stationNowNext, sideInfo, isDone, isNow, winnerSide, scoreText, fallbackState,
-  fmtDateShort, publicView, nameByCode, teamLabel, vetoInfo, mapName,
+  fmtDateShort, publicView, nameByCode, teamLabel, vetoInfo, mapName, isBo3, seriesInfo, seriesText, liveSeriesScore,
 } from './schedule.js';
 import { placesOf } from './bracket.js';
 import { loadQr, qrNode } from '../admin/qr.js';
@@ -425,7 +425,7 @@ export default async function render(root, params = {}) {
     const hasScore = done && m.score_a != null && m.score_b != null;
     const tag = m.stage === 'group'
       ? h('span', { class: 'sm-grp' }, GROUP_LABEL[m.grp] || m.grp)
-      : h('span', { class: 'sm-tag' }, stageText(m));
+      : h('span', { class: 'sm-tag' }, isBo3(m) ? `${stageText(m)} · Bo3` : stageText(m));
     let body;
     if (joined) {
       body = h('span', { class: 'sm-t ph' }, joined);
@@ -449,7 +449,7 @@ export default async function render(root, params = {}) {
     const rows = mergedMatches(state);
     const byNo = new Map(rows.map((m) => [m.no, m]));
     const dkey = day === 1 ? '2026-10-24' : '2026-10-25';
-    const keep = day === 1 ? ['12:45'] : ['12:00', '16:15'];
+    const keep = day === 1 ? ['12:45'] : ['12:00', '17:30'];   // 2-р өдөр: үдийн цай, шагнал (Bo3 финалын дараа 17:30)
     const items = wavesOf(day).map((w) => ({ t: tms(w.start), w }));
     for (const [hhmm, text] of (DAY_INFO[day === 1 ? 'd1' : 'd2'] || [])) {
       if (keep.includes(hhmm)) items.push({ t: tms(`${dkey}T${hhmm}:00+08:00`), hhmm, text });
@@ -484,21 +484,30 @@ export default async function render(root, params = {}) {
     const done = isDone(m);
     const win = done ? winnerSide(m) : null;
     // Газрын зураг (удирдамж 02 §7.9): шийдэгдсэн бол нэр, хасалт явагдаж байвал «сонгож байна»; эхлээгүй / өгөгдөлгүй бол юу ч үгүй.
+    // Bo3: одоогийн/дараагийн газар («2-р газар · Nuke») + тоглосон газрын оноо; цуврал шийдэгдвэл бүх газрын оноо.
     const v = vetoInfo(state, m);
-    const mapLine = !v || (!v.started && !v.map) ? null
-      : v.map ? h('div', { class: 'lc-map' }, h('span', {}, 'Газрын зураг'), h('b', {}, mapName(v.map)))
-        : h('div', { class: 'lc-map prog' }, h('span', {}, 'Газрын зураг сонгож байна'), h('b', {}, `${v.steps.length}/${v.total}`));
+    const si = seriesInfo(state, m);
+    let mapLine = null;
+    if (!v || (!v.started && !v.map && !v.maps.length)) mapLine = null;
+    else if (v.bo === 3 && v.done && si) {
+      const played = { ...si, rows: si.rows.slice(0, si.played) };
+      mapLine = si.decided
+        ? h('div', { class: 'lc-map ser' }, h('span', {}, 'Bo3'), h('b', {}, seriesText(si)))
+        : h('div', { class: 'lc-map bo3' }, h('span', {}, `${si.current + 1}-р газар`), h('b', {}, si.currentMap ? mapName(si.currentMap) : '—'),
+          si.played ? h('em', { class: 'lc-ser' }, seriesText(played)) : null);
+    } else if (v.map) mapLine = h('div', { class: 'lc-map' }, h('span', {}, 'Газрын зураг'), h('b', {}, mapName(v.map)));
+    else mapLine = h('div', { class: 'lc-map prog' }, h('span', {}, 'Газрын зураг сонгож байна'), h('b', {}, `${v.steps.length}/${v.total}`));
     const nextLine = current && next ? (() => {
       const p = pairText(state, next);
       return h('div', { class: 'lc-next' }, h('b', {}, `Дараа ${fmtTime(next.start)}`), h('span', {}, p.joined || `${p.A.text} – ${p.B.text}`));
     })() : null;
     const card = h('div', { class: `lc${current ? ' is-live' : ''}${done ? ' is-done' : ''}${m.stage === 'final' ? ' final' : ''}${mapLine ? ' has-map' : ''}` }, hd,
-      h('div', { class: 'lc-stage' }, `${stageText(m)} · ${fmtTime(m.start)}–${fmtTime(m.end)}`),
+      h('div', { class: 'lc-stage' }, `${stageText(m)}${si ? ' · Bo3' : ''} · ${fmtTime(m.start)}–${fmtTime(m.end)}`),
       h('div', { class: 'lc-mu' },
         joined
           ? h('div', { class: 'lc-team ph' }, joined)
           : [h('div', { class: `lc-team${A.known ? '' : ' ph'}${win === 'a' ? ' win' : ''}` }, A.text),
-            h('div', { class: 'lc-vs' }, done ? (scoreText(m) || 'VS') : 'VS'),
+            h('div', { class: 'lc-vs' }, done ? (scoreText(m) || 'VS') : (liveSeriesScore(m, si) || 'VS')),
             h('div', { class: `lc-team${B.known ? '' : ' ph'}${win === 'b' ? ' win' : ''}` }, B.text)]),
       mapLine,
       nextLine);
@@ -586,7 +595,7 @@ export default async function render(root, params = {}) {
         `Үзэгчид ${PLACES.hall}д LED дэлгэцээр үзнэ. ${PLACES.lab}-д орохгүй`];
       case 'day1': return [come, 'Тоглолтын үеэр утсаа шүүгчид хадгалуулна', fb, `Хуваарь, оноо: ${SITE_SHORT}`];
       case 'night': return ['10.25 (Ня) 09:30-д шөвгийн 8 эхэлнэ', come, fb, `Хуваарь, оноо: ${SITE_SHORT}`];
-      case 'day2': return ['Финал, 3-р байрын тоглолт 14:45-д. Шагнал гардуулах ёслол 16:15-д', come, fb, `Хуваарь, оноо: ${SITE_SHORT}`];
+      case 'day2': return ['Финал, 3-р байр 14:30-д, Bo3. Шагнал гардуулах ёслол 17:30-д', come, fb, `Хуваарь, оноо: ${SITE_SHORT}`];
       default: return [`Баярлалаа! Дүн: ${SITE_SHORT}`, 'Шилжин явах «Сургуулийн аварга» цом аварга ангид'];
     }
   }
@@ -696,8 +705,8 @@ export default async function render(root, params = {}) {
       h('div', { class: 'tl' }, [
         ['10.24 (Бя)', '09:45–16:45', 'Хэсгийн шат'],
         ['10.25 (Ня)', '09:30', 'Шөвгийн 8'],
-        ['10.25 (Ня)', '14:45', 'Финал'],
-        ['10.25 (Ня)', '16:15', 'Шагнал'],
+        ['10.25 (Ня)', '14:30', 'Финал · Bo3'],
+        ['10.25 (Ня)', '17:30', 'Шагнал'],
       ].map(([d, t, l], i) => h('div', { class: `tl-i${i === 2 ? ' gold' : ''}` },
         h('span', { class: 'tl-d' }, d), h('b', { class: 'tl-t' }, t), h('span', { class: 'tl-l' }, l))))),
 
@@ -791,8 +800,8 @@ export default async function render(root, params = {}) {
         h('div', { class: 'brk' },
           h('div', { class: 'brk-col' }, h('div', { class: 'brk-cap' }, 'Шөвгийн 8'), [13, 15, 14, 16].map((n) => koBox(by.get(n), now))),
           h('div', { class: 'brk-col mid' }, h('div', { class: 'brk-cap' }, 'Шөвгийн 4'), [17, 18].map((n) => koBox(by.get(n), now))),
-          h('div', { class: 'brk-col' }, h('div', { class: 'brk-cap gold' }, 'Финал'), koBox(by.get(19), now, 'final'),
-            h('div', { class: 'brk-cap' }, '3-р байр'), koBox(by.get(20), now))));
+          h('div', { class: 'brk-col' }, h('div', { class: 'brk-cap gold' }, isBo3(by.get(19)) ? 'Финал · Bo3' : 'Финал'), koBox(by.get(19), now, 'final'),
+            h('div', { class: 'brk-cap' }, isBo3(by.get(20)) ? '3-р байр · Bo3' : '3-р байр'), koBox(by.get(20), now))));
     },
 
     champion: () => {
@@ -1079,7 +1088,7 @@ export default async function render(root, params = {}) {
         h('div', { class: 'cd-bar' }, bar),
         cd.matches ? waveList(cd.matches) : null);
     } else {
-      // 2-р өдөр 16:15-аас: ёслол дөнгөж эхэлж байна («гардууллаа» биш), финал албан ёсоор батлагдвал 'over' болно.
+      // 2-р өдөр 17:30-аас: ёслол дөнгөж эхэлж байна («гардууллаа» биш), финал албан ёсоор батлагдвал 'over' болно.
       const awards = cd.phase === 'day2';
       add(cdBox, h('div', { class: 'cd-label' }, awards ? 'Шагнал гардуулах ёслол' : cd.label),
         h('div', { class: 'cd-end' }, icon('trophy'), h('b', {}, awards ? fmtTime(TIMES.awards) : '10.24–25')));

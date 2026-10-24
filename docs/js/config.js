@@ -4,7 +4,7 @@ export const SUPABASE_KEY = 'sb_publishable_3qVbHvZtEnnXJ_INQTQKjw_MKir4rC8';
 export const LEGACY_ANON_KEY =
   'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Ind3cHhzeGlrZXp0dnZncnlsdGRwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk4Njc4NjAsImV4cCI6MjA5NTQ0Mzg2MH0.1SP8RRWZphN4fhHmL9lccRw6CF4Jj7Dthb6ia9lALJw';
 export const SITE_URL = 'https://shgge.github.io/cs2-2026/';
-export const BUILD = '20261023-2219';
+export const BUILD = '20261024-2232';
 export const TZ = 'Asia/Ulaanbaatar';
 
 // Сургуулийн мэдээлэл (SPEC v5, 2026-10-15).

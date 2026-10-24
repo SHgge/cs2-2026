@@ -88,6 +88,25 @@ export function playKO(state, sides, { status = 'final' } = {}) {
   return state;
 }
 
+/**
+ * Makes match `no` a Bo3 series (as migration 14 does for 19/20) with map results [[a, b], …] in game order.
+ * The series score (maps won) is written only once a side has 2 wins, as the server does; status 'final' by default
+ * ('live' while undecided). forfeit 'a'/'b' = side that lost → 0:2 / 2:0, no games. maps optional.
+ */
+export function setSeries(state, no, games, { status, forfeit = null, maps = null } = {}) {
+  const m = match(state, no);
+  const list = forfeit ? [] : games.map(([a, b]) => ({ a, b }));
+  const won = (side) => list.filter((g) => (side === 'a' ? g.a > g.b : g.b > g.a)).length;
+  const sa = forfeit ? (forfeit === 'a' ? 0 : 2) : won('a');
+  const sb = forfeit ? (forfeit === 'b' ? 0 : 2) : won('b');
+  const decided = Math.max(sa, sb) === 2;
+  Object.assign(m, {
+    best_of: 3, games: list, maps, forfeit, ot: false, status: status || (decided ? 'final' : 'live'),
+    score_a: decided ? sa : null, score_b: decided ? sb : null,
+  });
+  return m;
+}
+
 /** Small deterministic PRNG (mulberry32) so random-looking tests are reproducible. */
 export function mulberry32(seed) {
   let a = seed >>> 0;

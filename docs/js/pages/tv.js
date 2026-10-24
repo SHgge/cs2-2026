@@ -2,6 +2,8 @@
 // 20 секунд тутам «Хэсгийн байр» ↔ «Хасагдах шат» (?panel=groups|bracket|veto — нэгийг нь тогтмол харуулна).
 // Газрын зургийн хасалт (удирдамж 02 §7.9): станц бүрийн одоогийн/дараагийн тоглолтын самбар «Газрын зургийн хасалт»
 // эргэлтэд нэмэгдэнэ; хасалт явагдаж байхад тэр самбар дээр тогтоно, дуусахад шийдэгдсэн газрын зураг нэг ээлж (20 с) үлдэнэ.
+// Финал, 3-р байр Bo3 (14-р migration): хасах, хасах, сонгох, сонгох, хасах, хасах → шийдвэрлэх; цувралын оноо (газрын тоо),
+// одоогийн газар («2-р газар · Nuke») ба газар бүрийн оноо.
 // Шинэ хувилбар гарвал (config.js BUILD, 10 минут тутам) хуудсыг өөрөө дахин ачаална (#/screen-тэй адил; ?overlay=1-д биш).
 // ?overlay=1 — OBS-д зориулсан ил тод доод мөр (?overlay=1&station=A — зөвхөн нэг станц). Зөвхөн ангийн нэр харуулна.
 import { h, clear, fmtTime, fmtDate } from '../ui.js';
@@ -10,7 +12,7 @@ import { BUILD, SCHOOL, FB_PAGE, PLACES } from '../config.js';
 import { GROUPS, STATION_LABEL, EVENT_NAME, CUP_NAME } from '../event.js';
 import {
   makeClock, mergedMatches, stationNowNext, nextWave, sideInfo, scoreText, isDone, statusOf, stageTag,
-  fallbackState, ubDay, fmtDateShort, winnerSide, vetoInfo, mapName,
+  fallbackState, ubDay, fmtDateShort, winnerSide, vetoInfo, mapName, seriesInfo, seriesText, liveSeriesScore,
 } from './schedule.js';
 import { groupCard } from './groups.js';
 import { bracketTree } from './bracket.js';
@@ -85,11 +87,11 @@ export default async function render(root, params = {}) {
     const B = sideInfo(cur, m, 'b');
     const done = isDone(m);
     const win = done ? winnerSide(m) : null;
-    const sc = done ? scoreText(m) : '';
+    const sc = done ? scoreText(m) : liveSeriesScore(m, seriesInfo(cur, m));   // Bo3: явагдаж буй цувралын оноо
     const long = (t) => (t.length > 8 ? ' long' : '');
     return h('div', { class: cls },
       h('span', { class: `tv-team${A.known ? '' : ' ph'}${win === 'a' ? ' win' : ''}${long(A.text)}` }, A.text),
-      h('span', { class: sc ? 'tv-sc' : 'tv-vs' }, sc || 'VS'),
+      h('span', { class: sc ? `tv-sc${done ? '' : ' live'}` : 'tv-vs' }, sc || 'VS'),
       h('span', { class: `tv-team r${B.known ? '' : ' ph'}${win === 'b' ? ' win' : ''}${long(B.text)}` }, B.text));
   }
 
@@ -118,10 +120,25 @@ export default async function render(root, params = {}) {
   }
 
   // ---------- газрын зургийн хасалт (удирдамж 02 §7.9) ----------
-  /** Мөрөнд: шийдэгдсэн газрын зураг, эсвэл «Газрын зургийн хасалт 3/6». Хасалт эхлээгүй / өгөгдөлгүй бол юу ч үгүй. */
+  /**
+   * Мөрөнд: шийдэгдсэн газрын зураг, эсвэл «Газрын зургийн хасалт 3/6». Хасалт эхлээгүй / өгөгдөлгүй бол юу ч үгүй.
+   * Bo3: «Газрын зургийн хасалт, сонголт 3/6»; дууссаны дараа тоглож буй/дараагийн газар («2-р газар · Nuke») ба
+   * тоглосон газрын оноо, цуврал шийдэгдвэл бүх газрын оноо.
+   */
   function mapChip(m) {
     const v = vetoInfo(cur, m);
-    if (!v || (!v.started && !v.map)) return null;
+    if (!v || (!v.started && !v.map && !v.maps.length)) return null;
+    if (v.bo === 3) {
+      if (!v.done) return h('span', { class: 'tv-mapc prog' }, `Газрын зургийн хасалт, сонголт ${v.steps.length}/${v.total}`);
+      const si = seriesInfo(cur, m);
+      if (!si) return null;
+      if (si.decided) return h('span', { class: 'tv-mapc ser' }, h('small', {}, 'Bo3'), seriesText(si));
+      const played = { ...si, rows: si.rows.slice(0, si.played) };
+      return [
+        si.currentMap ? h('span', { class: 'tv-mapc' }, h('small', {}, `${si.current + 1}-р газар`), mapName(si.currentMap)) : null,
+        si.played ? h('span', { class: 'tv-mapc ser' }, seriesText(played)) : null,
+      ];
+    }
     return v.map
       ? h('span', { class: 'tv-mapc' }, h('small', {}, 'Газрын зураг'), mapName(v.map))
       : h('span', { class: 'tv-mapc prog' }, `Газрын зургийн хасалт ${v.steps.length}/${v.total}`);
@@ -150,6 +167,7 @@ export default async function render(root, params = {}) {
     if (!f) return h('article', { class: 'tv-vb empty' }, head, h('p', {}, 'Одоогоор хасалт алга'));
     const { m, v } = f;
     const team = (side) => sideInfo(cur, m, side).text;
+    if (v.bo === 3) return bo3Board(head, m, v, team);
     let turn;
     if (v.done) turn = h('div', { class: 'tv-vb-st done' }, h('small', {}, 'Тоглох газрын зураг'), h('b', {}, mapName(v.map)));
     else if (!v.next) turn = h('div', { class: 'tv-vb-st' }, 'Зоос хаяж, эхэлж хасах багийг тодруулна');
@@ -164,6 +182,33 @@ export default async function render(root, params = {}) {
         return h('div', { class: `tv-map${side ? ' ban' : pick ? ' pick' : ''}` },
           h('b', {}, mapName(k)),
           h('span', { class: label.length > 10 ? 'long' : null }, label || '\u00A0'));
+      })));
+  }
+
+  /**
+   * Bo3 самбар: ээлж «8а хасна (1/6)» / «8а сонгоно (3/6)», дууссаны дараа «Тоглох газрын зураг: Inferno · Nuke · Mirage».
+   * Хавтан: хассан нь зурсан + баг, сонгосон нь «1 · 8а» / «2 · 10б», үлдсэн нь «3 · Шийдвэрлэх».
+   */
+  function bo3Board(head, m, v, team) {
+    let turn;
+    if (v.done) {
+      turn = h('div', { class: 'tv-vb-st done' }, h('small', {}, 'Тоглох газрын зураг'),
+        h('b', {}, v.maps.map((k) => mapName(k)).join(' · ')));
+    } else if (!v.next) turn = h('div', { class: 'tv-vb-st' }, 'Зоос хаяж, эхэлж хасах багийг тодруулна');
+    else if (!v.started) turn = h('div', { class: 'tv-vb-st' }, 'Зоосоор ', h('b', {}, team(v.next.side)), ' эхэлж хасна');
+    else if (v.nextAct === 'pick') turn = h('div', { class: 'tv-vb-st' }, h('b', {}, team(v.next.side)), ` сонгоно (${v.steps.length}/${v.total})`);
+    else turn = h('div', { class: 'tv-vb-st' }, h('b', {}, team(v.next.side)), ` хасна (${v.steps.length}/${v.total})`);
+    const acts = Array.isArray(v.acts) ? v.acts : [];
+    const tile = new Map();
+    let n = 0;
+    v.steps.forEach((x, i) => tile.set(x.map, acts[i] === 'pick' ? { cls: 'pick', label: `${++n} · ${team(x.side)}` } : { cls: 'ban', label: team(x.side) }));
+    if (v.done && v.maps[2] && !tile.has(v.maps[2])) tile.set(v.maps[2], { cls: 'pick dec', label: '3 · Шийдвэрлэх' });
+    return h('article', { class: `tv-vb bo3${v.done ? ' is-done' : ''} ko-${m.stage}` }, head, turn,
+      h('div', { class: 'tv-maps' }, v.pool.map((k) => {
+        const t = tile.get(k) || { cls: '', label: '' };
+        return h('div', { class: `tv-map${t.cls ? ` ${t.cls}` : ''}` },
+          h('b', {}, mapName(k)),
+          h('span', { class: t.label.length > 10 ? 'long' : null }, t.label || '\u00A0'));
       })));
   }
 
@@ -240,7 +285,7 @@ export default async function render(root, params = {}) {
         const m = current || next;
         if (!m) continue;
         const A = sideInfo(cur, m, 'a'); const B = sideInfo(cur, m, 'b');
-        const sc = isDone(m) ? scoreText(m) : '';
+        const sc = isDone(m) ? scoreText(m) : liveSeriesScore(m, seriesInfo(cur, m));
         ovBox.appendChild(h('div', { class: `ov-m${m.grp ? ` gc-${m.grp}` : ` ko-${m.stage}`}` },
           h('span', { class: 'ov-st' }, (STATION_LABEL[s] || s).replace(' станц', '')),
           stageTag(m),

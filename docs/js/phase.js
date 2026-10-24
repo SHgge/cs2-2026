@@ -30,8 +30,8 @@ export const TIMES = Object.freeze({
   day1End: '2026-10-24T18:00:00+08:00',
   day2Open: '2026-10-25T07:00:00+08:00',
   day2First: '2026-10-25T09:30:00+08:00',  // first quarterfinals
-  awards: '2026-10-25T16:15:00+08:00',
-  day2End: '2026-10-25T18:00:00+08:00',
+  awards: '2026-10-25T17:30:00+08:00',   // Bo3 final + 3rd place 14:30–17:15 (user, 10.24; was 16:15)
+  day2End: '2026-10-25T19:00:00+08:00',
 });
 
 const UB = 8 * 3600e3;
@@ -103,7 +103,7 @@ export function regSummary(state) {
 /**
  * Screen phase at instant `now` (ms):
  * 'reg' (online registration open) → 'closed' (until 10.24 07:00) → 'day1' (07:00–18:00) → 'night' → 'day2' → 'over'
- * ('over' from 10.25 18:00, or earlier once the final and the 3rd-place match are official).
+ * ('over' from 10.25 19:00, or earlier once the final and the 3rd-place match are official).
  * 'prep' replaces 'reg' and 'closed' as soon as the draw is published (groups known) — until 10.24 07:00:
  * the screen then prepares the teams (groups, day-1 timetable, rules, managers) instead of pushing registration.
  */

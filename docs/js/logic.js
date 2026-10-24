@@ -22,6 +22,9 @@ import { GROUPS, GROUP_LABEL, TEAMS, DRAW_ORDER, MATCHES, MAPS } from './event.j
  * @property {'a'|'b'|null} forfeit  side that LOST by forfeit (technical loss 13:0)
  * @property {number|null} team_a  resolved team id, null while unknown
  * @property {number|null} team_b
+ * @property {number} [best_of]  3 for a Bo3 series (state-driven: matches 19/20 since migration 14), else 1/absent
+ * @property {string[]|null} [maps]  Bo3: [first team's pick, other team's pick, decider] as far as the veto got
+ * @property {{a:number, b:number, map?:string|null}[]} [games]  Bo3 map results in game order (public: past the hold)
  */
 
 /**
@@ -203,6 +206,8 @@ export function validScore(stage, a, b, forfeit = null) {
 /**
  * The legal result of a match, or null if it has no legal score (status is NOT checked here).
  * A forfeit counts as 13:0 for the other side.
+ * Bo3 (bestOf 3): the series score in maps won once decided (seriesState) — {a: 2, b: 1, ot: false, …}; a forfeit
+ * counts as 2:0 for the other side; undecided → null.
  * @param {Partial<Match>} m
  * @returns {{a:number, b:number, forfeit:'a'|'b'|null, ot:boolean, winner:'a'|'b'|null}|null}  winner null = 12:12 draw
  */
@@ -210,6 +215,10 @@ export function matchResult(m) {
   if (!m || typeof m !== 'object') return null;
   const f = m.forfeit === 'a' || m.forfeit === 'b' ? m.forfeit : null;
   if (!f && !noForfeit(m.forfeit)) return null;
+  if (bestOf(m) === 3) {
+    const s = seriesState(m);
+    return s.decided ? { a: s.wonA, b: s.wonB, forfeit: f, ot: false, winner: s.winner } : null;
+  }
   const a = f ? (f === 'a' ? 0 : 13) : toInt(m.score_a);
   const b = f ? (f === 'b' ? 0 : 13) : toInt(m.score_b);
   if (a === null || b === null || !validScore(m.stage, a, b, f)) return null;
@@ -219,13 +228,23 @@ export function matchResult(m) {
 /**
  * Score text in a : b order: "13 : 9", "16 : 14 (OT)", "13 : 0 (техникийн)" / "0 : 13 (техникийн)"; '' if no score yet.
  * OT is read from the score (a side reached 16+), so it never contradicts the numbers.
+ * Bo3: the series score in maps won, "2 : 1" ("2 : 0 (техникийн)" / "0 : 2 (техникийн)"); '' until the series is
+ * decided (the running count and the map scores come from seriesState / fmtSeries).
  * @param {Partial<Match>} m
  * @returns {string}
  */
 export function fmtScore(m) {
   if (!m || typeof m !== 'object') return '';
-  if (m.forfeit === 'a') return '0 : 13 (техникийн)';
-  if (m.forfeit === 'b') return '13 : 0 (техникийн)';
+  const bo3 = bestOf(m) === 3;
+  if (m.forfeit === 'a') return bo3 ? '0 : 2 (техникийн)' : '0 : 13 (техникийн)';
+  if (m.forfeit === 'b') return bo3 ? '2 : 0 (техникийн)' : '13 : 0 (техникийн)';
+  if (bo3) {
+    const s = seriesState(m);
+    if (s.decided) return `${s.wonA} : ${s.wonB}`;
+    const x = toInt(m.score_a);
+    const y = toInt(m.score_b);
+    return x === null || y === null ? '' : `${x} : ${y}`;
+  }
   const a = toInt(m.score_a);
   const b = toInt(m.score_b);
   if (a === null || b === null) return '';
@@ -636,34 +655,162 @@ export function mapInfo(key) {
 }
 
 const otherSide = (s) => (s === 'a' ? 'b' : 'a');
+/** The pool to veto from: the given list when it has ≥ 2 maps, else event.js MAPS. */
+const poolKeys = (pool) => (Array.isArray(pool) && pool.length >= 2 ? pool : MAPS.map((x) => x.key));
+
+/**
+ * Best-of of a match: 3 when the state says best_of 3 (the final 19 and the 3rd-place match 20 since migration 14),
+ * else 1. State-driven only — event.js MATCHES carries no best_of.
+ * @param {Partial<Match>|null} m
+ * @returns {1|3}
+ */
+export function bestOf(m) {
+  return m && typeof m === 'object' && Number(m.best_of) === 3 ? 3 : 1;
+}
+
+/**
+ * Veto actions in step order (one per step, pool size − 1 steps). Bo1: every step a ban. Bo3: steps 2 and 3 are picks,
+ * the rest bans — with 7 maps ban, ban, pick, pick, ban, ban and the one map left is the decider (the server needs a
+ * pool of ≥ 5 maps for Bo3). Sides alternate first, other, … exactly as in Bo1.
+ * @param {Partial<Match>|null} m
+ * @param {string[]} [pool]  mapPool(state)
+ * @returns {('ban'|'pick')[]}
+ */
+export function vetoSequence(m, pool) {
+  const bo3 = bestOf(m) === 3;
+  return Array.from({ length: poolKeys(pool).length - 1 }, (_, i) => (bo3 && (i === 2 || i === 3) ? 'pick' : 'ban'));
+}
 
 /**
  * Veto state of a match. Bans alternate first, other, first, … (3 + 3 with 7 maps); the one map left is played.
  * first: m.veto_first, else 'a' for group matches (the team listed first bans first); knockout: null until the
- * coin toss is entered. steps: valid bans in order [{side, map}]; next: whose turn ({side, step}) or null when done
+ * coin toss is entered. steps: valid steps in order [{side, map}]; next: whose turn ({side, step}) or null when done
  * or first is missing. Never throws.
+ * Bo3 (bestOf 3): the steps follow vetoSequence (ban, ban, pick, pick, ban, ban); an entry's act (missing = 'ban')
+ * must match its step, else the list stops there. map stays null; maps = [first's pick, other's pick, decider once
+ * done]; banned lists bans only. Bo1: maps = [map] once done. acts = vetoSequence, picks = picked maps in order,
+ * nextAct = the act of the next step (null when next is null).
  * @param {object|null} m  match (state / resolveMatches / referee view)
  * @param {string[]} [pool]  mapPool(state)
  * @returns {{first:'a'|'b'|null, coin:boolean, steps:{side:'a'|'b', map:string}[], banned:string[],
  *   remaining:string[], total:number, done:boolean, map:string|null, next:{side:'a'|'b', step:number}|null,
- *   started:boolean, needsFirst:boolean}}
+ *   started:boolean, needsFirst:boolean, bo:1|3, acts:('ban'|'pick')[], picks:string[], maps:string[],
+ *   nextAct:'ban'|'pick'|null}}
  */
 export function vetoState(m, pool) {
-  const keys = Array.isArray(pool) && pool.length >= 2 ? pool : MAPS.map((x) => x.key);
+  const keys = poolKeys(pool);
+  const bo = bestOf(m);
+  const acts = vetoSequence(m, keys);
   const first = m && (m.veto_first === 'a' || m.veto_first === 'b') ? m.veto_first : (m && m.stage === 'group' ? 'a' : null);
   const steps = [];
+  const picks = [];
   const seen = new Set();
   for (const s of (m && Array.isArray(m.veto) ? m.veto : [])) {
     if (!s || (s.side !== 'a' && s.side !== 'b') || !keys.includes(s.map) || seen.has(s.map)) continue;
     if (steps.length >= keys.length - 1) break;
+    const act = s.act == null ? 'ban' : s.act;
+    if (act !== acts[steps.length]) break;
     seen.add(s.map);
     steps.push({ side: s.side, map: s.map });
+    if (act === 'pick') picks.push(s.map);
   }
   const remaining = keys.filter((k) => !seen.has(k));
   const done = remaining.length === 1;
   const next = !done && first ? { side: steps.length % 2 === 0 ? first : otherSide(first), step: steps.length } : null;
   return {
-    first, coin: !!(m && m.veto_coin), steps, banned: steps.map((s) => s.map), remaining, total: keys.length - 1,
-    done, map: done ? remaining[0] : null, next, started: steps.length > 0, needsFirst: !first,
+    first, coin: !!(m && m.veto_coin), steps, banned: steps.filter((_, i) => acts[i] === 'ban').map((s) => s.map),
+    remaining, total: keys.length - 1, done, map: done && bo === 1 ? remaining[0] : null, next, started: steps.length > 0,
+    needsFirst: !first, bo, acts, picks, maps: bo === 3 ? [...picks, ...(done ? remaining : [])] : done ? [remaining[0]] : [],
+    nextAct: next ? acts[next.step] : null,
   };
+}
+
+// ---------------------------------------------------------------- Bo3 series (final and 3rd-place match)
+
+/** A legal Bo3 series score in maps won: 2:0, 2:1, 1:2, 0:2. */
+const seriesScoreOk = (a, b) => a !== null && b !== null && Math.max(a, b) === 2 && Math.min(a, b) <= 1;
+
+/**
+ * Series state of a match. Bo3: games = the entered map results in order, each a legal knockout map score (MR12 +
+ * overtime, no draw); the list stops at the first illegal game, and games after the series is decided are ignored —
+ * both set valid = false. Game map: g.map, else maps[i]; maps = m.maps when present, else from the veto
+ * (vetoState().maps). The public state holds the newest games back (120 s): when the games do not decide the series
+ * but score_a/score_b hold a legal series score that agrees with them, that score decides it. A forfeit ('a'/'b' =
+ * side that lost) is 0:2 / 2:0 with no games. current = index of the game being (or next to be) played, null once
+ * decided; currentMap = its map (null if unknown).
+ * Bo1: the match as a single game once it has a legal result (a forfeit: no game; a 12:12 draw: decided, no winner).
+ * Status is NOT checked. Never throws.
+ * @param {Partial<Match>|null} m
+ * @param {string[]} [pool]  mapPool(state)
+ * @returns {{bo:1|3, games:{n:number, map:string|null, a:number, b:number, winner:'a'|'b'|null, ot:boolean}[],
+ *   wonA:number, wonB:number, decided:boolean, winner:'a'|'b'|null, maps:(string|null)[], current:number|null,
+ *   currentMap:string|null, valid:boolean}}
+ */
+export function seriesState(m, pool) {
+  const bo = bestOf(m);
+  const out = { bo, games: [], wonA: 0, wonB: 0, decided: false, winner: null, maps: [], current: 0, currentMap: null, valid: true };
+  if (!m || typeof m !== 'object') return out;
+  const keys = poolKeys(pool);
+  const known = (k) => (typeof k === 'string' && keys.includes(k) ? k : null);
+  const veto = vetoState(m, keys);
+  const end = (decided) => {
+    out.decided = decided;
+    out.winner = decided && out.wonA !== out.wonB ? (out.wonA > out.wonB ? 'a' : 'b') : null;
+    out.current = decided ? null : out.games.length;
+    out.currentMap = decided ? null : out.maps[out.current] || null;
+    return out;
+  };
+  if (bo === 1) {
+    const map = known(m.map) || veto.map;
+    out.maps = map ? [map] : [];
+    const r = matchResult(m);
+    if (!r) {
+      out.valid = m.score_a == null && m.score_b == null && noForfeit(m.forfeit);
+      return end(false);
+    }
+    if (!r.forfeit) out.games.push({ n: 1, map, a: r.a, b: r.b, winner: r.winner, ot: r.ot });
+    out.wonA = r.winner === 'a' ? 1 : 0;
+    out.wonB = r.winner === 'b' ? 1 : 0;
+    return end(true);
+  }
+  out.maps = Array.isArray(m.maps) && m.maps.length ? m.maps.slice(0, 3).map(known) : veto.maps;
+  if (m.forfeit === 'a' || m.forfeit === 'b') {
+    out.wonA = m.forfeit === 'a' ? 0 : 2;
+    out.wonB = m.forfeit === 'b' ? 0 : 2;
+    return end(true);
+  }
+  if (!noForfeit(m.forfeit)) out.valid = false;
+  const stage = KO_STAGES.has(m.stage) ? m.stage : 'final';
+  if (m.games != null && !Array.isArray(m.games)) out.valid = false;
+  for (const g of Array.isArray(m.games) ? m.games : []) {
+    if (out.wonA === 2 || out.wonB === 2) { out.valid = false; break; }
+    const a = g && typeof g === 'object' ? toInt(g.a) : null;
+    const b = g && typeof g === 'object' ? toInt(g.b) : null;
+    if (a === null || b === null || !validScore(stage, a, b)) { out.valid = false; break; }
+    const i = out.games.length;
+    out.games.push({ n: i + 1, map: known(g.map) || out.maps[i] || null, a, b, winner: a > b ? 'a' : 'b', ot: Math.max(a, b) >= 16 });
+    if (a > b) out.wonA += 1; else out.wonB += 1;
+  }
+  let decided = out.wonA === 2 || out.wonB === 2;
+  const sa = toInt(m.score_a);
+  const sb = toInt(m.score_b);
+  if (sa !== null || sb !== null) {
+    if (!decided && seriesScoreOk(sa, sb) && sa >= out.wonA && sb >= out.wonB) {
+      out.wonA = sa;
+      out.wonB = sb;
+      decided = true;
+    } else if (sa !== out.wonA || sb !== out.wonB) out.valid = false;
+  }
+  return end(decided);
+}
+
+/**
+ * Map scores of a Bo3 series in game order: "13:10 · 8:13 · 13:11" (overtime maps as played, e.g. "16:14");
+ * '' for Bo1 or before the first game.
+ * @param {Partial<Match>|null} m
+ * @returns {string}
+ */
+export function fmtSeries(m) {
+  if (bestOf(m) !== 3) return '';
+  return seriesState(m).games.map((g) => `${g.a}:${g.b}`).join(' · ');
 }

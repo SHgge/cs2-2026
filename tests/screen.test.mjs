@@ -79,9 +79,12 @@ describe('phase.js constants', () => {
     const order = ['day1Open', 'day1Start', 'day1End', 'day2Open', 'day2First', 'awards', 'day2End'];
     for (let i = 1; i < order.length; i++) assert.ok(Date.parse(TIMES[order[i - 1]]) < Date.parse(TIMES[order[i]]), order[i]);
     assert.deepEqual([TIMES.day1Open, TIMES.day1Start, TIMES.day1End], [d1('07:00'), d1('09:00'), d1('18:00')]);
-    assert.deepEqual([TIMES.day2Open, TIMES.day2First, TIMES.awards, TIMES.day2End], [d2('07:00'), d2('09:30'), d2('16:15'), d2('18:00')]);
+    // Bo3 final + 3rd place 14:30–17:15 (user, 10.24): awards 16:15 → 17:30, day-2 end 18:00 → 19:00
+    assert.deepEqual([TIMES.day2Open, TIMES.day2First, TIMES.awards, TIMES.day2End], [d2('07:00'), d2('09:30'), d2('17:30'), d2('19:00')]);
     assert.ok(DAY_INFO.d1.some(([hm, label]) => hm === '09:00' && /Нээлт/.test(label)));
-    assert.ok(DAY_INFO.d2.some(([hm, label]) => hm === '16:15' && /Шагнал/.test(label)));
+    assert.ok(DAY_INFO.d2.some(([hm, label]) => hm === '17:30' && /Шагнал/.test(label)));
+    assert.ok(DAY_INFO.d2.some(([hm, label]) => hm === '14:15' && /Завсарлага \(14:30 хүртэл\)/.test(label)));
+    assert.equal(DATES.links_expire_at, iso('2026-10-25T20:00:00'));
     assert.equal(TIMES.day2First, wavesOf(2)[0].start);
     assert.ok(Date.parse(wavesOf(1).at(-1).end) <= Date.parse(TIMES.day1End));
     assert.ok(Date.parse(wavesOf(2).at(-1).end) <= Date.parse(TIMES.awards));
@@ -203,12 +206,12 @@ describe('screenPhase', () => {
     assert.equal(screenPhase(at('2026-10-24T07:00:00'), late), 'day1');
   });
 
-  test('10.24 06:59 closed (prep with a published draw) → 07:00 day1 → 18:00 night → 10.25 07:00 day2 → 18:00 over', () => {
+  test('10.24 06:59 closed (prep with a published draw) → 07:00 day1 → 18:00 night → 10.25 07:00 day2 → 19:00 over', () => {
     const rows = [
       ['2026-10-24T06:59:00', 'closed'], ['2026-10-24T06:59:59', 'closed'], ['2026-10-24T07:00:00', 'day1'],
       ['2026-10-24T12:00:00', 'day1'], ['2026-10-24T17:59:59', 'day1'], ['2026-10-24T18:00:00', 'night'],
       ['2026-10-25T06:59:59', 'night'], ['2026-10-25T07:00:00', 'day2'], ['2026-10-25T16:05:00', 'day2'],
-      ['2026-10-25T17:59:59', 'day2'], ['2026-10-25T18:00:00', 'over'], ['2026-10-26T09:00:00', 'over'],
+      ['2026-10-25T17:59:59', 'day2'], ['2026-10-25T18:59:59', 'day2'], ['2026-10-25T19:00:00', 'over'], ['2026-10-26T09:00:00', 'over'],
     ];
     for (const st of [makeState(), regState(), null]) {
       const before = drawShown(st) ? 'prep' : 'closed';
@@ -261,7 +264,7 @@ describe('slidesFor', () => {
       ['2026-10-24T10:00:00', ['live', 'standings', 'live', 'day1', 'prize', 'watch'], ['standings', 'day1', 'prize', 'watch']],
       ['2026-10-24T20:00:00', ['standings', 'day2', 'prize', 'watch'], ['standings', 'day2', 'prize', 'watch']],
       ['2026-10-25T11:00:00', ['live', 'bracket', 'live', 'day2', 'prize', 'watch'], ['bracket', 'day2', 'prize', 'watch']],
-      ['2026-10-25T18:00:00', ['champion', 'bracket', 'thanks'], ['champion', 'bracket', 'thanks']],
+      ['2026-10-25T19:00:00', ['champion', 'bracket', 'thanks'], ['champion', 'bracket', 'thanks']],
     ];
     for (const [t, live, still] of rows) {
       assert.deepEqual(slidesFor(at(t), st), live, t);
@@ -412,7 +415,7 @@ describe('wavesOf', () => {
     assert.equal(w1.length, 6);
     assert.equal(w2.length, 4);
     assert.deepEqual(w1.map(fmt), ['09:45-10:45:1,2', '10:45-11:45:3,4', '11:45-12:45:5,6', '13:45-14:45:7,8', '14:45-15:45:9,10', '15:45-16:45:11,12']);
-    assert.deepEqual(w2.map(fmt), ['09:30-10:45:13,14', '10:45-12:00:15,16', '13:00-14:15:17,18', '14:45-16:00:19,20']);
+    assert.deepEqual(w2.map(fmt), ['09:30-10:45:13,14', '10:45-12:00:15,16', '13:00-14:15:17,18', '14:30-17:15:19,20']);
     assert.ok(w1.every((w) => w.start.startsWith('2026-10-24')) && w2.every((w) => w.start.startsWith('2026-10-25')));
     for (const w of [...w1, ...w2]) assert.deepEqual(w.nos.map((no) => STATION[no]).sort(), ['A', 'B'], fmt(w));
     for (const ws of [w1, w2]) for (let i = 1; i < ws.length; i++) assert.ok(Date.parse(ws[i - 1].end) <= Date.parse(ws[i].start));
@@ -500,7 +503,7 @@ describe('countdownFor', () => {
     for (const t of ['2026-10-24T18:00:00', '2026-10-25T06:59:59']) assert.deepEqual(countdownFor(at(t), makeState()), want, t);
   });
 
-  test('day 2: waves, then the awards 16:15, then nothing', () => {
+  test('day 2: waves, then the awards 17:30 (Bo3 final + 3rd place 14:30–17:15), then nothing', () => {
     const s = makeState();
     const rows = [
       ['07:00:00', `day2 countdown | ${NEXT} | - | ${d2('09:30')} | 13,14`],
@@ -508,13 +511,13 @@ describe('countdownFor', () => {
       ['10:45:00', `day2 live | ${LIVE} | ${d2('10:45')} | ${d2('12:00')} | 15,16`],
       ['12:00:00', `day2 countdown | ${NEXT} | - | ${d2('13:00')} | 17,18`],
       ['13:00:00', `day2 live | ${LIVE} | ${d2('13:00')} | ${d2('14:15')} | 17,18`],
-      ['14:15:00', `day2 countdown | ${NEXT} | - | ${d2('14:45')} | 19,20`],
-      ['14:45:00', `day2 live | ${LIVE} | ${d2('14:45')} | ${d2('16:00')} | 19,20`],
-      ['15:59:59', `day2 live | ${LIVE} | ${d2('14:45')} | ${d2('16:00')} | 19,20`],
-      ['16:00:00', `day2 countdown | ${AWARDS} | - | ${d2('16:15')} | -`],
-      ['16:14:59', `day2 countdown | ${AWARDS} | - | ${d2('16:15')} | -`],
-      ['16:15:00', 'day2 none | Шагнал гардууллаа | - | - | -'],
-      ['17:59:59', 'day2 none | Шагнал гардууллаа | - | - | -'],
+      ['14:15:00', `day2 countdown | ${NEXT} | - | ${d2('14:30')} | 19,20`],
+      ['14:30:00', `day2 live | ${LIVE} | ${d2('14:30')} | ${d2('17:15')} | 19,20`],
+      ['17:14:59', `day2 live | ${LIVE} | ${d2('14:30')} | ${d2('17:15')} | 19,20`],
+      ['17:15:00', `day2 countdown | ${AWARDS} | - | ${d2('17:30')} | -`],
+      ['17:29:59', `day2 countdown | ${AWARDS} | - | ${d2('17:30')} | -`],
+      ['17:30:00', 'day2 none | Шагнал гардууллаа | - | - | -'],
+      ['18:59:59', 'day2 none | Шагнал гардууллаа | - | - | -'],
     ];
     for (const [hms, want] of rows) assert.equal(brief(countdownFor(at(`2026-10-25T${hms}`), s)), want, hms);
   });
@@ -522,7 +525,7 @@ describe('countdownFor', () => {
   test('over: no countdown', () => {
     const want = { phase: 'over', mode: 'none', label: 'Тэмцээн өндөрлөлөө', target: null, sub: null, chip: null, urgent: false };
     assert.deepEqual(countdownFor(at('2026-10-25T16:05:00'), endState()), want);
-    assert.deepEqual(countdownFor(at('2026-10-25T18:00:00'), makeState()), want);
+    assert.deepEqual(countdownFor(at('2026-10-25T19:00:00'), makeState()), want);
     assert.deepEqual(countdownFor(at('2026-10-26T10:00:00'), null), want);
   });
 });

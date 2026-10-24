@@ -38,7 +38,7 @@ describe('event.js', () => {
     assert.equal(STAGE_LABEL.final, 'Финал');
   });
 
-  test('20 matches: full ISO +08:00 times, SPEC §7 slots (60 min group, 75 min knockout)', () => {
+  test('20 matches: full ISO +08:00 times, SPEC §7 slots (60 min group, 75 min knockout, 165 min Bo3 final / 3rd place)', () => {
     assert.deepEqual(MATCHES.map((m) => m.no), Array.from({ length: 20 }, (_, i) => i + 1));
     const iso = /^2026-10-2[45]T\d\d:\d\d:00\+08:00$/;
     const hhmm = (s) => s.slice(11, 16);
@@ -47,12 +47,14 @@ describe('event.js', () => {
       assert.match(m.end, iso, `#${m.no} end`);
       assert.equal(m.day, m.stage === 'group' ? 1 : 2);
       assert.equal(m.start.slice(0, 10), m.day === 1 ? '2026-10-24' : '2026-10-25');
-      assert.equal(Date.parse(m.end) - Date.parse(m.start), (m.stage === 'group' ? 60 : 75) * MIN, `#${m.no} length`);
+      const slot = m.stage === 'group' ? 60 : m.stage === 'final' || m.stage === 'third' ? 165 : 75; // Bo3 (user 10.24): 3 × ~45 + 2 × 15 min
+      assert.equal(Date.parse(m.end) - Date.parse(m.start), slot * MIN, `#${m.no} length`);
       assert.ok(m.stage === 'group' ? GROUPS.includes(m.grp) && m.code === null : m.grp === null && typeof m.code === 'string');
     }
     assert.deepEqual(MATCHES.map((m) => hhmm(m.start)), [
       '09:45', '09:45', '10:45', '10:45', '11:45', '11:45', '13:45', '13:45', '14:45', '14:45', '15:45', '15:45',
-      '09:30', '09:30', '10:45', '10:45', '13:00', '13:00', '14:45', '14:45']);
+      '09:30', '09:30', '10:45', '10:45', '13:00', '13:00', '14:30', '14:30']);
+    assert.deepEqual(MATCHES.slice(18).map((m) => hhmm(m.end)), ['17:15', '17:15']);
     assert.deepEqual(MATCHES.map((m) => m.stage), [...Array(12).fill('group'), 'qf', 'qf', 'qf', 'qf', 'sf', 'sf', 'final', 'third']);
     assert.deepEqual(MATCHES.slice(12).map((m) => m.code), ['1/4-1', '1/4-3', '1/4-2', '1/4-4', '1/2-1', '1/2-2', 'Финал', '3-р байр']);
     // nothing after 18:00 (SPEC §1)
@@ -135,7 +137,9 @@ describe('event.js', () => {
 
   test('DAY_INFO blocks and frozen exports', () => {
     assert.deepEqual(DAY_INFO.d1.map((x) => x[0]), ['08:30', '09:00', '09:30', '12:45', '16:45']);
-    assert.deepEqual(DAY_INFO.d2.map((x) => x[0]), ['08:30', '08:45', '12:00', '14:15', '16:15']);
+    assert.deepEqual(DAY_INFO.d2.map((x) => x[0]), ['08:30', '08:45', '12:00', '14:15', '17:30']);
+    assert.deepEqual(DAY_INFO.d2.slice(3), [['14:15', 'Завсарлага (14:30 хүртэл)'], ['17:30', 'Шагнал гардуулах, шилжин явах цом']]);
+    assert.equal(DATES.links_expire_at, '2026-10-25T20:00:00+08:00'); // class/referee links (Bo3 day 2 ends later)
     for (const x of [GROUPS, TEAMS, TEAMS[0], MATCHES, MATCHES[0], DRAW_ORDER, DAY_INFO, DAY_INFO.d1[0]]) assert.ok(Object.isFrozen(x));
     assert.throws(() => { MATCHES[0].start = 'x'; }, TypeError);
   });

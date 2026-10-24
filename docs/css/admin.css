@@ -183,10 +183,11 @@ details.adm-sec > summary { font-size: 1.05rem; }
 .adm-map:hover:not(:disabled) { border-color: var(--navy); }
 .adm-map[aria-pressed="true"] { background: var(--navy); border-color: var(--navy); color: #fff; box-shadow: 0 0 0 3px #CBD5E1; }
 .adm-map:disabled { cursor: default; }
-.adm-map:disabled:not(.is-banned):not(.is-pick) { opacity: .55; }
+.adm-map:disabled:not(.is-banned):not(.is-pick):not(.is-decider) { opacity: .55; }
 .adm-map.is-banned { background: #F1F5F9; border-style: dashed; color: var(--muted); }
 .adm-map.is-banned .adm-map-n { text-decoration: line-through; text-decoration-thickness: 2px; }
 .adm-map.is-pick { background: var(--ok); border-color: var(--ok); color: #fff; }
+.adm-map.is-decider { background: var(--navy); border-color: var(--navy); color: #fff; }   /* Bo3 3-р газар */
 .adm-map-s { font-size: .74rem; font-weight: 600; overflow-wrap: anywhere; }
 .adm-veto-coin, .adm-veto-confirm, .adm-veto-act { gap: 6px; }
 .adm-veto-act { padding-top: 6px; border-top: 1px dashed var(--line); }
@@ -194,6 +195,21 @@ details.adm-sec > summary { font-size: 1.05rem; }
 .adm-veto-cmd { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .adm-veto-cmd code { flex: 1 1 auto; padding: 8px 10px; border-radius: 8px; background: #0F172A; color: #E2E8F0; font-size: .95rem; overflow-wrap: anywhere; user-select: all; }
 .adm-veto-cmd.is-alt code { background: #fff; color: var(--navy); border: 1px solid #CBD5E1; font-size: .88rem; }
+.adm-veto-cmd pre {
+  flex: 1 1 100%; margin: 0; padding: 8px 10px; border-radius: 8px; background: #0F172A; color: #E2E8F0;
+  font-size: .86rem; line-height: 1.45; white-space: pre-wrap; overflow-wrap: anywhere; user-select: all;
+}
+.adm-sides { display: grid; gap: 6px; }
+.adm-side { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; }
+.adm-side select { width: auto; flex: 0 1 180px; }
+
+/* ---- Bo3 series (results card, matches 19, 20) ---- */
+.adm-series { display: grid; gap: 6px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px; background: #F8FAFC; }
+.adm-series-head { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) auto; align-items: center; gap: 8px; }
+.adm-series-score { min-width: 4.2em; text-align: center; font-size: 1.4rem; font-weight: 800; color: var(--navy); }
+.adm-game-l { line-height: 1.25; overflow-wrap: anywhere; }
+.adm-game-w { text-align: right; color: var(--ok); font-weight: 600; overflow-wrap: anywhere; }
+.adm-series-note { margin: 0; }
 .btn.adm-btn-danger { color: var(--err); border-color: #FCA5A5; }
 .adm-veto-off { font-weight: 600; }
 

@@ -46,10 +46,13 @@ export const refReport = (token, no, action, scoreA = null, scoreB = null, forfe
     p_token: token, p_no: no, p_action: action, p_score_a: scoreA, p_score_b: scoreB,
     p_forfeit: forfeit, p_team_a: teamA, p_team_b: teamB,
   });
-/** Map veto on the referee's device (CONTRACT §4): action 'first' (side 'a'|'b'|'coin', knockout), 'ban' (map, step),
- *  'undo' (step), 'reset' (chief only). step = number of bans the client saw — a stale tap fails with 'stale'. */
+/** Map veto on the referee's device (CONTRACT §4): action 'first' (side 'a'|'b'|'coin', knockout), 'ban' / 'pick' (map, step;
+ *  Bo3 picks at steps 2–3), 'undo' (step), 'reset' (chief only). step = number of veto steps the client saw — a stale tap
+ *  (or the wrong act for that step) fails with 'stale'. */
 export const refVeto = (token, no, action, { map = null, step = null, side = null } = {}) =>
   rpc('cs2_ref_veto', { p_token: token, p_no: no, p_action: action, p_map: map, p_step: step, p_side: side });
+/** Bo3 series (matches 19, 20): the FULL list of game results so far, [{a, b}, …] (1–3; [] clears). Idempotent. */
+export const refGames = (token, no, games) => rpc('cs2_ref_games', { p_token: token, p_no: no, p_games: games });
 export const adminSetup = (code, label, secret) => rpc('cs2_admin_setup', { p_code: code, p_label: label, p_secret: secret });
 export const adminLogin = (label, secret) => rpc('cs2_admin_login', { p_label: label, p_secret: secret });
 export const adminLogout = (session) => rpc('cs2_admin_logout', { p_session: session });
@@ -72,9 +75,11 @@ export function errorText(r) {
     bad_session: 'Нэвтрэх хугацаа дууссан. Дахин нэвтэрнэ үү.',
     bad_credentials: 'Нэр эсвэл нууц үг буруу.',
     throttled: 'Олон удаа буруу оролдсон. Түр хүлээгээд дахин оролдоно уу.',
-    forbidden: 'Энэ үйлдлийг хийх эрхгүй.',
+    forbidden: r && r.reason === 'games_started' ? 'Тоглолт эхэлсэн тул газрын зургийн сонголтыг өөрчлөхгүй (ерөнхий шүүгч/админ).'
+      : 'Энэ үйлдлийг хийх эрхгүй.',
     not_found: 'Олдсонгүй.',
-    invalid_score: 'Оноо дүрэмд нийцэхгүй байна.',
+    invalid_score: r && r.game ? `${r.game}-р газрын оноо дүрэмд нийцэхгүй (эсвэл цуврал аль хэдийн шийдэгдсэн) байна.`
+      : 'Оноо дүрэмд нийцэхгүй байна.',
     draw_state: 'Сугалааны энэ алхмыг одоо хийх боломжгүй.',
     bad_commit: 'Нууц тоо commit-тэй таарахгүй байна.',
     already_setup: 'Админ аль хэдийн тохируулагдсан.',

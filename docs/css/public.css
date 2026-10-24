@@ -57,6 +57,12 @@ body.fullscreen.pub-idle, body.fullscreen.pub-idle * { cursor: none !important; 
 .pm-vstep { font-weight: 700; color: var(--navy-2); }
 .pm-bans { display: inline-flex; flex-wrap: wrap; align-items: baseline; gap: 0 7px; }
 .pm-bans s { text-decoration-color: var(--err); text-decoration-thickness: 1.5px; }
+/* Bo3 (финал, 3-р байр): явагдаж буй цувралын оноо, сонгосон газар, газар бүрийн оноо (тоглож буй нь тодорсон) */
+.pm-score.live { background: var(--err); }
+.pm-pick { font-weight: 800; color: var(--navy); }
+.pm-maps { display: inline-flex; flex-wrap: wrap; align-items: baseline; gap: 2px 12px; color: var(--ink); font-variant-numeric: tabular-nums; }
+.pm-g b { font-weight: 800; color: var(--navy); }
+.pm-g.cur { background: var(--gold-l); border-radius: 6px; padding: 0 6px; }
 
 /* ---------- хуваарь ---------- */
 .sc-tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 12px 0; }
@@ -573,6 +579,10 @@ body.fullscreen a { color: #93C5FD; }
 .tv-map.ban span { color: #FCA5A5; }
 .tv-map.pick { background: #FCD34D; border-color: #FEF3C7; color: #111827; box-shadow: 0 0 0 .25em rgba(252, 211, 77, .28); }
 .tv-map.pick span { color: #111827; text-transform: uppercase; letter-spacing: .05em; }
+/* Bo3: цувралын явцын оноо (газрын тоо), газар бүрийн оноо, шийдвэрлэх газар (цайвар шар) */
+.tv-sc.live { color: #FCA5A5; }
+.tv-mapc.ser { font-size: 1.05em; font-weight: 700; color: #FDE68A; font-variant-numeric: tabular-nums; }
+.tv-map.pick.dec { background: #FEF3C7; }
 /* ТВ дээрх хэсэг, схем (бараан) */
 .tv .gp-card { background: var(--dk-panel-2); border-color: var(--dk-line); border-top-color: var(--g); box-shadow: none; color: #fff; padding: .5em .6em; }
 .tv .gp-title { color: var(--g-d); font-size: 1.15em; }

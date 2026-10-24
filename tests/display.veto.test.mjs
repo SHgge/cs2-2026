@@ -64,7 +64,7 @@ const SIX = ['nuke', 'cache', 'ancient', 'anubis', 'dust2', 'inferno'];
 test('old state (no migration-13 fields): no veto keys on the merged matches, vetoInfo null, card unchanged', () => {
   const st = makeState();
   for (const m of S.mergedMatches(st)) {
-    for (const k of ['veto_first', 'veto_coin', 'veto', 'map']) assert.ok(!(k in m), `#${m.no} ${k}`);
+    for (const k of ['veto_first', 'veto_coin', 'veto', 'map', 'best_of', 'maps', 'games']) assert.ok(!(k in m), `#${m.no} ${k}`);
     assert.equal(S.vetoInfo(st, m), null);
   }
   const card = S.matchCard(st, row(st, 1), Date.parse('2026-10-24T10:00:00+08:00'));

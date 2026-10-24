@@ -31,7 +31,7 @@ export const DATES = deepFreeze({
   drill_to: '2026-10-23T18:00:00+08:00',
   draw_commit_on: '2026-10-21T00:00:00+08:00',       // commit (SHA-256) published on the portal
   draw_at: '2026-10-22T16:00:00+08:00',              // technical meeting + group draw
-  links_expire_at: '2026-10-25T18:00:00+08:00',      // class and referee links
+  links_expire_at: '2026-10-25T20:00:00+08:00',      // class and referee links (Bo3 final: 18:00 → 20:00, 10.24)
 });
 
 /** Group draw time (10.22 (Пү) 16:00). */
@@ -119,7 +119,11 @@ const g = (no, grp, station, start, end, a, b) => ({
   start: `${D1}${start}${TZ}`, end: `${D1}${end}${TZ}`, src_a: `seat:${grp}${a}`, src_b: `seat:${grp}${b}`,
 });
 
-/** Day 2 knockout match (MR12 + overtime MR3). 'rank:A1' = group A winner, 'W:13' / 'L:17' = winner / loser of a match. */
+/**
+ * Day 2 knockout match (MR12 + overtime MR3). 'rank:A1' = group A winner, 'W:13' / 'L:17' = winner / loser of a match.
+ * The final (19) and the 3rd-place match (20) are Bo3 (user, 10.24): 14:30–17:15 = 3 maps + 2 × 15 min rest. Bo3 itself is
+ * state-driven (cs2.matches.best_of, logic.bestOf) — these rows stay format-free.
+ */
 const k = (no, stage, code, station, start, end, srcA, srcB) => ({
   no, day: 2, stage, code, grp: null, station, start: `${D2}${start}${TZ}`, end: `${D2}${end}${TZ}`, src_a: srcA, src_b: srcB,
 });
@@ -147,12 +151,12 @@ export const MATCHES = deepFreeze([
   k(16, 'qf', '1/4-4', 'B', '10:45', '12:00', 'rank:G1', 'rank:V2'),
   k(17, 'sf', '1/2-1', 'A', '13:00', '14:15', 'W:13', 'W:15'),
   k(18, 'sf', '1/2-2', 'B', '13:00', '14:15', 'W:14', 'W:16'),
-  k(19, 'final', 'Финал', 'A', '14:45', '16:00', 'W:17', 'W:18'),
-  k(20, 'third', '3-р байр', 'B', '14:45', '16:00', 'L:17', 'L:18'),
+  k(19, 'final', 'Финал', 'A', '14:30', '17:15', 'W:17', 'W:18'),
+  k(20, 'third', '3-р байр', 'B', '14:30', '17:15', 'L:17', 'L:18'),
 ]);
 
 /** Fixed non-match blocks for the two timetables (SPEC §7): [time 'HH:MM', label]. */
 export const DAY_INFO = deepFreeze({
   d1: [['08:30', 'Бүртгэл'], ['09:00', 'Нээлт'], ['09:30', 'Нэвтрэлт, халаалт'], ['12:45', 'Үдийн цай (13:45 хүртэл)'], ['16:45', 'Нөөц цаг (17:45 хүртэл)']],
-  d2: [['08:30', 'Нөөц ээлж (шаардлагатай бол)'], ['08:45', 'Бүртгэл'], ['12:00', 'Үдийн цай (13:00 хүртэл)'], ['14:15', 'Завсарлага'], ['16:15', 'Шагнал гардуулах, шилжин явах цом']],
+  d2: [['08:30', 'Нөөц ээлж (шаардлагатай бол)'], ['08:45', 'Бүртгэл'], ['12:00', 'Үдийн цай (13:00 хүртэл)'], ['14:15', 'Завсарлага (14:30 хүртэл)'], ['17:30', 'Шагнал гардуулах, шилжин явах цом']],
 });

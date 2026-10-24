@@ -1,14 +1,19 @@
 // Газрын зургийн хасалт (map veto, журам 02 §7.9) — зохион байгуулагч / ерөнхий шүүгчийн удирдлага.
 // results.js тоглолт бүрийн картад vetoBox()-ийг харуулна. 7 газрын зургаас багууд ээлжлэн 3, 3-ыг хасаж, үлдсэнд нь
 // тоглоно. Хэсгийн шатанд эхэнд бичигдсэн баг (a) эхэлж хасна; хасагдах шатанд зоос шиднэ. Талыг хутганы раундаар.
-// Цэвэр туслахууд (vetoReady, vetoSummary, vetoErrorText, maplistLine, serverCommand) DOM ашиглахгүй — Node-оор тестэлнэ.
+// Bo3 (финал №19, 3-р байр №20, best_of = 3): зоосонд ялсан баг эхэлнэ — хасах, хасах, сонгох (1-р газар), сонгох
+// (2-р газар), хасах, хасах; үлдсэн нь 3-р газар (шийдвэрлэх). 1-р газарт нөгөө баг, 2-р газарт эхэлсэн баг талаа сонгоно
+// (MatchZy map_sides, хуудсанд л — DB-д хадгалахгүй); 3-р газарт хутганы раунд.
+// Цэвэр туслахууд (vetoReady, vetoSummary, vetoErrorText, maplistLine, serverCommand, seriesMapsText) DOM ашиглахгүй —
+// Node-оор тестэлнэ.
 import { h, clear, toast, copyText } from '../ui.js';
 import { confirmDialog, errMsg } from './core.js';
 import { mapPool, mapInfo, vetoState } from '../logic.js';
+import { sideChooser, seriesJsonLines } from './util.js';
 
 export const VETO_OFF_TEXT = 'Газрын зургийн систем хараахан идэвхжээгүй (migration 13)';
 export const KNIFE_TEXT = 'Талыг хутганы раундаар сонгоно';
-const VETO_FIELDS = ['veto', 'veto_first', 'veto_coin', 'map'];
+const VETO_FIELDS = ['veto', 'veto_first', 'veto_coin', 'map', 'best_of', 'maps', 'games'];
 
 /** true when the admin overview carries the veto fields (migration 13 applied). */
 export function vetoReady(state) {
@@ -28,6 +33,14 @@ export function maplistLine(key) { return key ? `"maplist": ["${mapInfo(key).id}
 /** Server console command for the decided map: 'changelevel de_mirage' — only when the JSON is already loaded, before LIVE. */
 export function serverCommand(key) { return key ? `changelevel ${mapInfo(key).id}` : ''; }
 
+/** Bo3 maps in game order (picks, then the decider): 'Inferno → Nuke → Mirage'; '' when none. */
+export function seriesMapsText(maps) {
+  return (Array.isArray(maps) ? maps : []).filter((k) => typeof k === 'string' && k).map((k) => mapInfo(k).name).join(' → ');
+}
+
+/** The verb of the next veto step: 'сонгоно' on a Bo3 pick step, else 'хасна'. */
+const verbOf = (v) => (v && v.nextAct === 'pick' ? 'сонгоно' : 'хасна');
+
 /**
  * One-line status for the card (shown after «Газрын зураг:»).
  * opts.locked — the match is final (no veto changes); opts.known === false — the teams are not known yet.
@@ -40,10 +53,15 @@ export function serverCommand(key) { return key ? `changelevel ${mapInfo(key).id
 export function vetoSummary(v, nameA, nameB, opts = {}) {
   const nm = (s) => (s === 'a' ? nameA : s === 'b' ? nameB : '—');
   if (!v) return { text: 'Эхлээгүй', detail: '', kind: '' };
-  if (v.done) return { text: mapInfo(v.map).name, detail: '', kind: 'ok' };
-  if (opts.locked) return { text: '—', detail: v.started ? `хасалт ${v.steps.length}/${v.total}, дуусаагүй` : 'хасалт бүртгээгүй', kind: '' };
+  const bo3 = v.bo === 3;
+  if (v.done) return { text: bo3 ? seriesMapsText(v.maps) || '—' : mapInfo(v.map).name, detail: bo3 ? 'Bo3' : '', kind: 'ok' };
+  const step = bo3 ? 'алхам' : 'хасалт';
+  if (opts.locked) return { text: '—', detail: v.started ? `${step} ${v.steps.length}/${v.total}, дуусаагүй` : 'хасалт бүртгээгүй', kind: '' };
   if (opts.known === false && !v.started) return { text: 'Эхлээгүй', detail: '', kind: '' };
-  if (v.started) return { text: `Хасалт ${v.steps.length}/${v.total}${v.next ? ` — ${nm(v.next.side)} хасна` : ''}`, detail: '', kind: 'warn' };
+  if (v.started) {
+    const head = bo3 ? 'Алхам' : 'Хасалт';
+    return { text: `${head} ${v.steps.length}/${v.total}${v.next ? ` — ${nm(v.next.side)} ${verbOf(v)}` : ''}`, detail: '', kind: 'warn' };
+  }
   if (!v.first) return { text: 'Эхлээгүй', detail: 'зоос шидээгүй', kind: '' };
   return { text: 'Эхлээгүй', detail: `${nm(v.first)} эхэлж хасна${v.coin ? ' (зоосоор)' : ''}`, kind: '' };
 }
@@ -55,6 +73,8 @@ const REASON = {
   first_missing: 'Эхлээд зоос шидэж, эхэлж хасах багийг тогтооно уу.',
   veto_done: 'Хасалт аль хэдийн дууссан байна.',
   veto_empty: 'Буцаах хасалт алга.',
+  games_started: 'Цувралын газрын оноо орсон тул хасалтыг шүүгч өөрчлөхгүй (зөвхөн ерөнхий шүүгч / админ).',
+  pool_small: 'Bo3-д дор хаяж 5 газрын зураг хэрэгтэй.',
 };
 
 /** Mongolian text of a failed 'match_veto' answer. */
@@ -63,7 +83,7 @@ export function vetoErrorText(r) {
   if (r && r.error === 'forbidden' && REASON[r.reason]) return REASON[r.reason];
   if (r && r.error === 'validation') {
     const e = (Array.isArray(r.errors) && r.errors[0]) || {};
-    if (e.field === 'map') return e.code === 'taken' ? 'Энэ газрын зураг аль хэдийн хасагдсан байна.' : 'Газрын зураг буруу байна.';
+    if (e.field === 'map') return e.code === 'taken' ? 'Энэ газрын зураг аль хэдийн хасагдсан (эсвэл сонгогдсон) байна.' : 'Газрын зураг буруу байна.';
     if (e.field === 'side') return 'Эхлэх баг буруу байна.';
     return 'Хүсэлт буруу байна. Хуудсыг шинэчилнэ үү.';
   }
@@ -79,6 +99,7 @@ export function vetoBox(ctx, no, names, ui = {}) {
   const { nameA, nameB, known } = names;
   const open = ui.vetoOpen instanceof Set ? ui.vetoOpen : (ui.vetoOpen = new Set());
   const sels = ui.vetoSel instanceof Map ? ui.vetoSel : (ui.vetoSel = new Map()); // no → {map, step} (ban step 1 of 2)
+  const sides = ui.vetoSides instanceof Map ? ui.vetoSides : (ui.vetoSides = new Map()); // Bo3: no → {1:'ct'|'t', 2:…} (page only)
   const box = h('details', { class: 'adm-veto' });
   box.open = open.has(no);
   box.addEventListener('toggle', () => { if (box.open) open.add(no); else open.delete(no); });
@@ -178,20 +199,38 @@ export function vetoBox(ctx, no, names, ui = {}) {
       }
     }
 
+    const bo3 = v.bo === 3;
+    const acts = Array.isArray(v.acts) ? v.acts : [];
+    const isPick = v.nextAct === 'pick';
+    const picksBefore = (i) => acts.slice(0, i).filter((a) => a === 'pick').length;   // picks before step i
     if (v.next) {
-      body.appendChild(h('p', { class: 'adm-veto-turn' }, `Алхам ${v.next.step + 1}/${v.total}: `, h('b', {}, nm(v.next.side)), ' хасна'));
+      body.appendChild(h('p', { class: 'adm-veto-turn' }, `Алхам ${v.next.step + 1}/${v.total}: `, h('b', {}, nm(v.next.side)),
+        isPick ? ` сонгоно (${picksBefore(v.next.step) + 1}-р газар)` : ' хасна'));
+    }
+    const games = Array.isArray(m.games) ? m.games : [];
+    if (bo3 && games.length && !locked) {
+      body.appendChild(h('p', { class: 'small adm-warn-text' }, `Анхаар: ${games.length} газрын оноо орсон — хасалтыг өөрчилбөл газрын зураг солигдоно.`));
     }
 
-    // map buttons: banned (struck, team label), decided (green), selectable
+    // map buttons: banned (struck, team label), picked (Bo3 1-р/2-р газар), decided (green / Bo3 decider), selectable
     const grid = h('div', { class: 'adm-maps', role: 'group', 'aria-label': `№${no} газрын зургууд` });
+    const stepOf = new Map(v.steps.map((x, i) => [x.map, i]));
+    const decider = bo3 && v.done ? v.remaining[0] : null;
     for (const key of pool) {
       const info = mapInfo(key);
-      const i = v.banned.indexOf(key);
-      const pick = v.done && v.map === key;
+      const i = stepOf.has(key) ? stepOf.get(key) : -1;
+      const pick = !bo3 && v.done && v.map === key;
       let sub = '';
       let cls = 'adm-map';
       let label = info.name;
-      if (i >= 0) { cls += ' is-banned'; sub = `${i + 1}. ${nm(v.steps[i].side)}`; label = `${info.name} — ${i + 1}-р хасалт, ${nm(v.steps[i].side)}`; } else if (pick) { cls += ' is-pick'; sub = 'Тоглоно'; label = `${info.name} — тоглох газрын зураг`; }
+      if (i >= 0 && acts[i] === 'pick') {
+        const n = picksBefore(i) + 1;
+        cls += ' is-pick'; sub = `${n}-р газар · ${nm(v.steps[i].side)}`; label = `${info.name} — ${n}-р газар, ${nm(v.steps[i].side)} сонгосон`;
+      } else if (i >= 0) {
+        cls += ' is-banned'; sub = `${i + 1}. ${nm(v.steps[i].side)}`; label = `${info.name} — ${i + 1}-р хасалт, ${nm(v.steps[i].side)}`;
+      } else if (decider === key) {
+        cls += ' is-decider'; sub = '3-р газар · шийдвэрлэх'; label = `${info.name} — 3-р газар (шийдвэрлэх)`;
+      } else if (pick) { cls += ' is-pick'; sub = 'Тоглоно'; label = `${info.name} — тоглох газрын зураг`; }
       const selectable = can && i < 0 && !!v.next;
       const b = h('button', {
         type: 'button', class: cls, disabled: !selectable, 'aria-pressed': selectable ? String(sel === key) : null, 'aria-label': label,
@@ -211,19 +250,27 @@ export function vetoBox(ctx, no, names, ui = {}) {
     if (sel && v.next) {
       const name = mapInfo(sel).name;
       body.appendChild(h('div', { class: 'row adm-veto-confirm' },
-        act(`${name} хасах`, () => send('ban', { map: sel, step: v.steps.length }, `${nm(v.next.side)}: ${name} хаслаа`), 'adm-veto-ban', { disabled: !can }),
+        act(`${name} ${isPick ? 'сонгох' : 'хасах'}`,
+          () => send(isPick ? 'pick' : 'ban', { map: sel, step: v.steps.length }, `${nm(v.next.side)}: ${name} ${isPick ? 'сонголоо' : 'хаслаа'}`),
+          isPick ? 'adm-veto-ban gold' : 'adm-veto-ban', { disabled: !can }),
         act('Болих', () => { sels.delete(no); paint(); }, 'secondary')));
     } else if (v.next && can) {
-      body.appendChild(h('p', { class: 'small muted' }, 'Хасах газрын зургийг сонгоод баталгаажуулна уу.'));
+      body.appendChild(h('p', { class: 'small muted' }, `${isPick ? 'Тоглох' : 'Хасах'} газрын зургийг сонгоод баталгаажуулна уу.`));
     }
 
+    const copyRow = (text, cls, { disabled = false, label = null } = {}) => {
+      const copyBtn = h('button', { type: 'button', class: 'btn secondary small-btn', disabled, 'aria-label': `Хуулах: ${label || text}` }, 'Хуулах');
+      copyBtn.addEventListener('click', () => { if (!copyBtn.disabled) copyText(text); });
+      return h('div', { class: `adm-veto-cmd ${cls}` }, text.includes('\n') ? h('pre', { class: 'adm-mono' }, text) : h('code', { class: 'adm-mono' }, text), copyBtn);
+    };
     const mapKey = v.map || (typeof m.map === 'string' && m.map ? m.map : null);
-    if (v.done && mapKey) {
-      const copyRow = (text, cls) => {
-        const copyBtn = h('button', { type: 'button', class: 'btn secondary small-btn', 'aria-label': `Хуулах: ${text}` }, 'Хуулах');
-        copyBtn.addEventListener('click', () => copyText(text));
-        return h('div', { class: `adm-veto-cmd ${cls}` }, h('code', { class: 'adm-mono' }, text), copyBtn);
-      };
+    const maps = bo3 && v.done && Array.isArray(v.maps) ? v.maps.filter((k) => typeof k === 'string' && k) : [];
+    if (bo3 && maps.length === 3) {
+      body.appendChild(seriesDone(maps, v.first));
+    } else if (bo3) {
+      body.appendChild(h('p', { class: 'small muted' }, 'Bo3: хасах, хасах, сонгох, сонгох, хасах, хасах — үлдсэн нь 3-р газар (шийдвэрлэх). '
+        + 'Дуусахад MatchZy JSON-ий мөрүүд энд гарна.'));
+    } else if (v.done && mapKey) {
       // main: the match JSON line (MatchZy loads maplist[0]); changelevel only for a JSON that is already loaded
       body.appendChild(h('div', { class: 'adm-veto-done' },
         h('p', {}, 'Тоглох газрын зураг: ', h('b', {}, mapInfo(mapKey).name)),
@@ -236,6 +283,39 @@ export function vetoBox(ctx, no, names, ui = {}) {
       body.appendChild(h('p', { class: 'small muted' }, `${KNIFE_TEXT}. Хасалт дуусахад match JSON-ий maplist мөр энд гарна.`));
     }
 
+    /** Bo3 done: 3 maps, the two side choices (page only), MatchZy series lines, per-map changelevel fallback. */
+    function seriesDone(list, first) {
+      const cur = sides.get(no) || {};
+      const { lines, complete } = seriesJsonLines(list.map((k) => mapInfo(k).id), first, cur);
+      const sideRow = (game) => {
+        const chooser = sideChooser(first, game);
+        const s = h('select', { 'aria-label': `${game}-р газар: ${nm(chooser)} эхлэх тал` },
+          h('option', { value: '' }, 'Сонгоогүй'), h('option', { value: 'ct' }, 'CT-ээс эхэлнэ'), h('option', { value: 't' }, 'T-ээс эхэлнэ'));
+        s.value = cur[game] === 'ct' || cur[game] === 't' ? cur[game] : '';
+        s.dataset.game = String(game);
+        s.addEventListener('change', () => {
+          sides.set(no, { ...(sides.get(no) || {}), [game]: s.value });
+          paint();
+          const again = box.querySelector(`select[data-game="${game}"]`);
+          if (again) again.focus();
+        });
+        return h('label', { class: 'adm-side' },
+          h('span', {}, `${game}-р газар (${mapInfo(list[game - 1]).name}): `, h('b', {}, nm(chooser)), ' талаа сонгоно'), s);
+      };
+      return h('div', { class: 'adm-veto-done' },
+        h('p', {}, 'Тоглох газрын зургууд (Bo3): ',
+          h('b', {}, list.map((k, i) => `${i + 1}. ${mapInfo(k).name}`).join(' · ')), ' — 3-р газар шийдвэрлэх.'),
+        h('div', { class: 'adm-sides' }, sideRow(1), sideRow(2),
+          h('p', { class: 'small' }, `3-р газар (${mapInfo(list[2]).name}): `, h('b', {}, `${KNIFE_TEXT}.`))),
+        h('p', { class: 'small' }, 'Техникийн ахлагч final_A.json (3-р байр: 3-r-bair_B.json) дахь num_maps, maplist, map_sides, clinch_series мөрүүдийг '
+          + 'эдгээрээр солиод (давхар бүү үлдээ) matchzy_loadmatch ажиллуулна:'),
+        copyRow(lines.join('\n'), 'is-json', { disabled: !complete, label: 'MatchZy Bo3 мөрүүд' }),
+        complete ? null : h('p', { class: 'small adm-warn-text' }, '1, 2-р газрын талыг сонгосны дараа хуулна (таамаглахгүй).'),
+        h('p', { class: 'small' }, 'MatchZy цуврал ачаалагдахгүй бол газар бүрийн өмнө консолд, дараа нь exec tournament_knockout_mr12 '
+          + '(3-р газарт хутганы раунд). matchzy_loadmatch-ийг газар явагдаж байхад бүү ажиллуул:'),
+        list.map((k, i) => copyRow(serverCommand(k), 'is-alt', { label: `${i + 1}-р газар ${serverCommand(k)}` })));
+    }
+
     if (!locked) {
       const last = v.steps[v.steps.length - 1];
       body.appendChild(h('div', { class: 'row adm-veto-act' },
@@ -243,7 +323,7 @@ export function vetoBox(ctx, no, names, ui = {}) {
         act('Шинээр эхлүүлэх', async () => {
           const ok = await confirmDialog({
             title: `№${no} — хасалтыг шинээр эхлүүлэх үү?`,
-            text: [`${v.steps.length} хасалт${ko && m.veto_first ? ', зоосны үр дүн' : ''} устна.`, 'Багуудад мэдэгдээд дахин эхлүүлнэ үү.'],
+            text: [`${v.steps.length} ${bo3 ? 'алхам' : 'хасалт'}${ko && m.veto_first ? ', зоосны үр дүн' : ''} устна.`, 'Багуудад мэдэгдээд дахин эхлүүлнэ үү.'],
             ok: 'Шинээр эхлүүлэх',
             danger: true,
           });

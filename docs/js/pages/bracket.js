@@ -5,7 +5,7 @@ import { STATION_LABEL, CHAMPION_TITLE, PRIZES } from '../event.js';
 import { finalRanking } from '../logic.js';
 import {
   bindState, makeClock, mergedMatches, offlineNote, publicView, safe, teamLabel, sideInfo,
-  isDone, isNow, winnerSide, statusOf, STAGE_LABEL,
+  isDone, isNow, winnerSide, statusOf, STAGE_LABEL, isBo3, seriesInfo,
 } from './schedule.js';
 
 function koBox(state, m, now, compact) {
@@ -22,13 +22,26 @@ function koBox(state, m, now, compact) {
       h('span', { class: 'bk-sc' }, done && sc != null ? String(sc) : ''));
   };
   const label = m.stage === 'final' ? 'Финал' : m.stage === 'third' ? '3-р байр' : (m.code || STAGE_LABEL[m.stage] || '');
+  const foot = footText(state, m, done);
   return h('div', { class: `bk-box bks-${m.stage}${live ? ' is-now' : ''}${done ? ' is-done' : ''}` },
     h('div', { class: 'bk-bh' },
       h('b', {}, label),
       h('span', { class: 'bk-when' }, `${fmtTime(m.start)} · ${STATION_LABEL[m.station] || ''}`),
       live ? h('span', { class: 'chip pub-now' }, 'ОДОО') : (st.key === 'reported' ? h('span', { class: 'bk-prov' }, 'урьдчилсан') : null)),
     row('a'), row('b'),
-    done && (m.forfeit || m.ot) ? h('div', { class: 'bk-foot' }, m.forfeit ? 'Техникийн ялалт' : 'Нэмэлт цагтай') : null);
+    foot ? h('div', { class: 'bk-foot' }, foot) : null);
+}
+
+/** Хайрцгийн доод мөр: техникийн ялалт / нэмэлт цаг; Bo3 бол «Bo3 · 13:9, 9:13, 13:11» (газрын нэр, тоглосон газрын оноо). */
+function footText(state, m, done) {
+  if (done && m.forfeit) return 'Техникийн ялалт';
+  const si = seriesInfo(state, m);
+  if (si) {
+    const played = si.rows.filter((r) => r.a != null && r.b != null);
+    if (played.length) return `Bo3 · ${played.map((r) => `${r.a}:${r.b}`).join(', ')}`;
+    return si.rows.length ? `Bo3 · ${si.rows.map((r) => r.name).join(', ')}` : 'Bo3';
+  }
+  return done && m.ot ? 'Нэмэлт цагтай' : null;
 }
 
 /** Ангийн 1–3-р байр (logic.finalRanking: байр бүр тодорхой болмогц бөглөгдөнө) ба багш нарын өргөмжлөл. */
@@ -62,7 +75,7 @@ export function bracketTree(state, { now = Date.now(), compact = false, rows = n
     h('h3', { class: 'bk-h bk-h2' }, 'Шөвгийн 4', h('span', {}, t(17))),
     h('div', { class: 'bk-cell bk-s1' }, B(17)),
     h('div', { class: 'bk-cell bk-s2' }, B(18)),
-    h('h3', { class: 'bk-h bk-h3' }, 'Финал, 3-р байр', h('span', {}, t(19))),
+    h('h3', { class: 'bk-h bk-h3' }, 'Финал, 3-р байр', h('span', {}, isBo3(by.get(19)) ? `${t(19)} · Bo3` : t(19))),
     h('div', { class: 'bk-cell bk-f' }, championBox(state, places), B(19), B(20)));
 }
 
@@ -79,7 +92,7 @@ export function podium(state) {
       step(1, 'Аварга', `Шилжин явах цом, алтан медаль, өргөмжлөл, ${mnt(PRIZES.place[0])}`),
       step(3, '3-р байр', `Хүрэл медаль, өргөмжлөл, ${mnt(PRIZES.place[2])}`)),
     places.every((x) => x != null) ? null
-      : h('p', { class: 'muted small center' }, 'Финал, 3-р байрын тоглолт 10.25 (Ня) 14:45-д. Дүн баталгаажмагц энд гарна.'),
+      : h('p', { class: 'muted small center' }, 'Финал, 3-р байрын тоглолт 10.25 (Ня) 14:30-д, Bo3. Дүн баталгаажмагц энд гарна.'),
     h('p', { class: 'pd-mvp' }, h('b', {}, 'Тэмцээний шилдэг тоглогч (MVP): '),
       `жижиг цом, ${mnt(PRIZES.mvp_cash)}, өргөмжлөл. Зөвхөн ангийн багийн тоглогчдоос сонгож, хаалтын ёслолд зарлана. Шагналын сан ${mnt(PRIZES.fund)} (MVP орсон).`),
     award ? h('p', { class: 'pd-award' }, award === 'honor'
@@ -100,7 +113,7 @@ export default async function render(root) {
   clear(root);
   root.appendChild(h('div', { class: 'pub bkp' },
     h('h1', {}, 'Хасагдах шат'),
-    h('p', { class: 'muted' }, '10.25 (Ням). Ялагдсан баг хасагдана. Тэнцвэл нэмэлт цаг (MR3).'),
+    h('p', { class: 'muted' }, '10.25 (Ням). Ялагдсан баг хасагдана. Тэнцвэл нэмэлт цаг (MR3). Финал, 3-р байрын тоглолт Bo3: 2 газрын зураг түрүүлж хожсон баг ялна.'),
     body));
   const draw = () => {
     if (!cur) return;

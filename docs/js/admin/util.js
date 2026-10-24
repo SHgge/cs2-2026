@@ -1,6 +1,7 @@
 // Админы цэвэр туслах функцууд. DOM ашиглахгүй — Node-оор тестлэх боломжтой.
 import { SITE_URL, TZ, STAFF } from '../config.js';
 import { EVENT_NAME, DATES, FEE } from '../event.js';
+import { validScore } from '../logic.js';
 
 /* ---------- CSV (UTF-8 BOM, formula-injection safe) ---------- */
 export const CSV_BOM = '\uFEFF';
@@ -69,7 +70,7 @@ export function isFuture(iso, now = Date.now()) { const t = Date.parse(iso || ''
 /** Fallbacks when the live settings are not loaded (SPEC v5 §2): online registration = roster freeze. */
 export const DEFAULT_REG_CLOSES = '2026-10-23T23:59:59+08:00';
 export const REF_VALID_FROM = '2026-10-24T07:00:00+08:00';
-export const REF_VALID_TO = '2026-10-25T18:00:00+08:00';
+export const REF_VALID_TO = '2026-10-25T20:00:00+08:00';   // Bo3 финал 17:15 хүртэл, шагнал 17:30 (2026-10-24)
 
 export const classLink = (token) => `${SITE_URL}#/k/${token}`;
 export const refLink = (token) => `${SITE_URL}#/ref/${token}`;
@@ -348,5 +349,96 @@ export function forfeitScore(forfeit) {
 export const isKnockout = (stage) => stage === 'qf' || stage === 'sf' || stage === 'final' || stage === 'third';
 export const isOvertime = (stage, a, b) => isKnockout(stage) && Number.isFinite(a) && Number.isFinite(b) && Math.max(a, b) > 13;
 export function parseScore(v) { const s = String(v ?? '').trim(); return /^\d{1,2}$/.test(s) ? Number(s) : null; }
+
+/* ---------- Bo3 series (matches 19, 20) ---------- */
+/** Series forfeit: forfeit = side that LOST → 2:0 in maps for the other side (no games). */
+export function seriesForfeitScore(forfeit) {
+  if (forfeit === 'a') return { a: 0, b: 2 };
+  if (forfeit === 'b') return { a: 2, b: 0 };
+  return null;
+}
+
+/**
+ * Bo3 series from the per-game rows of the «Үр дүн» card (mirrors the server rules): every game a valid knockout score
+ * (MR12 + OT MR3, no draw), the series ends when a side has 2 map wins, no game after that. Rows are [{a, b}] with
+ * numbers or null (empty input); trailing empty rows are ignored.
+ * error codes (game = 1-based row): 'incomplete' (one side empty), 'gap' (an empty row before a filled one),
+ * 'invalid' (not a knockout score), 'after_clinch' (a game after the series was decided).
+ * @param {{a:number|null, b:number|null}[]} rows
+ * @param {string} [stage] 'final' | 'third'
+ * @returns {{a:number, b:number, games:{a:number, b:number}[], decided:boolean, winner:'a'|'b'|null,
+ *   error:{code:string, game:number}|null}}
+ */
+export function seriesScore(rows, stage = 'final') {
+  const list = Array.isArray(rows) ? rows : [];
+  const out = { a: 0, b: 0, games: [], decided: false, winner: null, error: null };
+  const num = (v) => (Number.isInteger(v) && v >= 0 ? v : null);
+  let blank = false;
+  for (let i = 0; i < list.length; i += 1) {
+    const r = list[i] || {};
+    const a = num(r.a);
+    const b = num(r.b);
+    if (a == null && b == null) { blank = true; continue; }
+    const game = i + 1;
+    if (a == null || b == null) return { ...out, error: { code: 'incomplete', game } };
+    if (blank) return { ...out, error: { code: 'gap', game } };
+    if (out.decided) return { ...out, error: { code: 'after_clinch', game } };
+    if (!validScore(stage, a, b)) return { ...out, error: { code: 'invalid', game } };
+    out.games.push({ a, b });
+    if (a > b) out.a += 1; else out.b += 1;
+    if (out.a === 2 || out.b === 2) { out.decided = true; out.winner = out.a === 2 ? 'a' : 'b'; }
+  }
+  return out;
+}
+
+/** «13:10 · 8:13 · 13:11» */
+export const gamesText = (games) => (Array.isArray(games) ? games : []).map((g) => `${g.a}:${g.b}`).join(' · ');
+
+/**
+ * Who chooses the starting side in game n of a Bo3 (standard rule): game 1 (the first team's pick) — the other team;
+ * game 2 (the other team's pick) — the first team; game 3 (decider) — nobody, knife round (null).
+ * @param {'a'|'b'|null} first coin-toss winner (bans first)
+ * @param {number} game 1 | 2 | 3
+ * @returns {'a'|'b'|null}
+ */
+export function sideChooser(first, game) {
+  if (first !== 'a' && first !== 'b') return null;
+  if (game === 1) return first === 'a' ? 'b' : 'a';
+  if (game === 2) return first;
+  return null;
+}
+
+/** MatchZy map_sides value: team1 = team_a (listed first), team2 = team_b; side 'ct' | 't'. Unknown → null. */
+export function matchzySide(chooser, side) {
+  if ((chooser !== 'a' && chooser !== 'b') || (side !== 'ct' && side !== 't')) return null;
+  return `${chooser === 'a' ? 'team1' : 'team2'}_${side}`;
+}
+
+export const SIDE_PLACEHOLDER = '<choose>';
+
+/**
+ * MatchZy Bo3 lines for the prepared match JSON (final_A.json / 3-r-bair_B.json): num_maps, maplist (ids in game order),
+ * map_sides (the chooser's side for games 1–2, knife on the decider; '<choose>' until chosen — never guessed),
+ * clinch_series. complete = all 3 maps and both sides known (only then may the block be copied).
+ * @param {string[]} ids server map ids in game order, e.g. ['de_inferno', 'de_nuke', 'de_mirage']
+ * @param {'a'|'b'|null} first coin-toss winner
+ * @param {{1?: 'ct'|'t'|'', 2?: 'ct'|'t'|''}} sides the chooser's starting side per game
+ * @returns {{lines:string[], complete:boolean}}
+ */
+export function seriesJsonLines(ids, first, sides = {}) {
+  const maps = Array.isArray(ids) ? ids.filter((x) => typeof x === 'string' && x) : [];
+  const s1 = matchzySide(sideChooser(first, 1), sides[1]);
+  const s2 = matchzySide(sideChooser(first, 2), sides[2]);
+  const q = (v) => `"${v}"`;
+  return {
+    lines: [
+      '"num_maps": 3,',
+      `"maplist": [${maps.map(q).join(', ')}],`,
+      `"map_sides": [${[s1 || SIDE_PLACEHOLDER, s2 || SIDE_PLACEHOLDER, 'knife'].map(q).join(', ')}],`,
+      '"clinch_series": true,',
+    ],
+    complete: maps.length === 3 && !!s1 && !!s2,
+  };
+}
 
 export function chunk(arr, n) { const out = []; for (let i = 0; i < arr.length; i += n) out.push(arr.slice(i, i + n)); return out; }

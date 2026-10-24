@@ -3,21 +3,27 @@
 // интернэт тасарвал localStorage-ийн дараалал. Ерөнхий шүүгч (station null) 'final' хийнэ.
 // Газрын зургийн хасалт (журам 02 §7.9): 7 газрын зураг, ээлжлэн 3 + 3 хасна, үлдсэн нэг дээр тоглоно — зөвхөн онлайн,
 // нэг удаад нэг хүсэлт (дараалалд орохгүй).
+// Bo3 (финал №19, 3-р байр №20; m.best_of = 3): хасах, хасах, сонгох (1-р газар), сонгох (2-р газар), хасах, хасах → үлдсэн
+// нь 3-р газар. Тал: 1-р газарт нөгөө баг, 2-р газарт эхэлсэн баг сонгоно (MatchZy JSON-д, DB-д хадгалахгүй), 3-р газарт хутга.
+// Газар бүрийн оноо (MR12 + OT) cs2_ref_games-ээр бүх жагсаалтаар нь илгээгдэнэ; 2 газар түрүүлсэн баг ялна.
 // API-аас ирсэн өгөгдлийг ЗӨВХӨН ui.h (textContent)-ээр DOM-д оруулна.
-import { refGet, refReport, refVeto, errorText } from '../api.js';
+import { refGet, refReport, refVeto, refGames, errorText } from '../api.js';
 import { h, fmtTime, fmtDate, toast, teamName, stationLabel, copyText } from '../ui.js';
 import { store } from '../store.js';
-import { validScore, resolveMatches, fmtScore, srcLabel as logicSrcLabel, mapPool, mapInfo, vetoState } from '../logic.js';
+import {
+  validScore, resolveMatches, fmtScore, srcLabel as logicSrcLabel, mapPool, mapInfo, vetoState, bestOf, seriesState,
+} from '../logic.js';
 import { MATCHES, GROUP_LABEL, EVENT_NAME } from '../event.js';
 
 const TOKEN_KEY = 'cs2.ref.token';
 const Q_PREFIX = 'cs2.ref.q.';
 const CACHE_PREFIX = 'cs2.ref.cache.';
+const SIDES_PREFIX = 'cs2.ref.sides.';
 const CACHE_TTL_MS = 3 * 24 * 3600 * 1000;
 const POLL_MS = 20000;
 const RETRY_MS = 15000;
 const KO = new Set(['qf', 'sf', 'final', 'third']);
-const ACTIONS = ['live', 'report', 'final'];
+const ACTIONS = ['live', 'report', 'final', 'games'];
 const STATUS_TEXT = { scheduled: 'Эхлээгүй', live: 'Явагдаж байна', reported: 'Илгээсэн', final: 'Баталгаажсан' };
 
 /* ================================================================== pure helpers (Node-д тестлэгдэнэ) */
@@ -110,11 +116,141 @@ export function checkScore(stage, a, b, forfeit, ot) {
   return { ok: false, msg: scoreHint(stage) };
 }
 
-export function validEntry(e) {
-  return !!e && typeof e.id === 'string' && Number.isInteger(e.no) && ACTIONS.includes(e.action);
+/* ---------- Bo3 цуврал (финал, 3-р байр) */
+
+/** Bo3 цуврал уу (logic.bestOf: DB-ийн best_of = 3). */
+export function isBo3(m) {
+  try { return bestOf(m) === 3; } catch (e) { return false; }
 }
 
-/** Дараалалд нэмнэ: шинэ 'report' нь ижил тоглолтын хуучин 'report'-ыг, шинэ 'final' нь хуучин 'final'-ыг орлоно. */
+const isScore = (v) => Number.isInteger(v) && v >= 0 && v <= 99;
+
+/** cs2_ref_games-ийн ачаалал: 0–3 газар, газар бүр {a, b} бүхэл тоо. */
+export function validGames(games) {
+  return Array.isArray(games) && games.length <= 3 && games.every((g) => !!g && isScore(g.a) && isScore(g.b));
+}
+
+/** «13:9 · 9:13 · 13:11» (жагсаалт, дараалал, баталгаажуулалтад). */
+export function gamesText(games) {
+  return (Array.isArray(games) ? games : []).map((g) => `${g.a}:${g.b}`).join(' · ');
+}
+
+/**
+ * Цувралын бүх газрыг шалгана (сервер мөн шалгана): газар бүр хасагдах шатны оноо (MR12 + OT, тэнцээгүй), 2 газар
+ * түрүүлж хожсоны дараа газар байхгүй. bad = буруу газрын дугаар (1-ээс).
+ */
+export function checkSeries(stage, games) {
+  const list = Array.isArray(games) ? games : [];
+  let wonA = 0;
+  let wonB = 0;
+  if (list.length > 3) return { ok: false, bad: 4, msg: 'Цуврал хамгийн ихдээ 3 газар.', wonA, wonB, decided: false, winner: null };
+  for (let i = 0; i < list.length; i++) {
+    const g = list[i];
+    if (wonA === 2 || wonB === 2) {
+      return { ok: false, bad: i + 1, msg: `Цуврал ${i}-р газарт шийдэгдсэн тул ${i + 1}-р газар тоглогдохгүй.`, wonA, wonB, decided: true, winner: wonA === 2 ? 'a' : 'b' };
+    }
+    if (!g || !isScore(g.a) || !isScore(g.b) || g.a === g.b || !logicValid(stage, g.a, g.b, null)) {
+      return { ok: false, bad: i + 1, msg: `${i + 1}-р газар: ${scoreHint(stage)}`, wonA, wonB, decided: false, winner: null };
+    }
+    if (g.a > g.b) wonA += 1; else wonB += 1;
+  }
+  const decided = wonA === 2 || wonB === 2;
+  return { ok: true, bad: null, msg: '', wonA, wonB, decided, winner: decided ? (wonA === 2 ? 'a' : 'b') : null };
+}
+
+/**
+ * n-р газрыг (1-ээс) a:b болгосон бүтэн жагсаалт: өмнөх газрууд хэвээр, шинэ дүнгээр цуврал эрт шийдэгдвэл дараагийн
+ * газрууд хасагдана (dropped — баталгаажуулах цонхонд хэлнэ). n нь 1…(газрын тоо + 1), ≤ 3 биш бол null.
+ */
+export function setGame(games, n, a, b) {
+  const list = (Array.isArray(games) ? games : []).map((g) => ({ a: g.a, b: g.b }));
+  if (!Number.isInteger(n) || n < 1 || n > 3 || n > list.length + 1) return null;
+  list[n - 1] = { a, b };
+  let wonA = 0;
+  let wonB = 0;
+  let cut = list.length;
+  for (let i = 0; i < list.length; i++) {
+    if (list[i].a > list[i].b) wonA += 1; else if (list[i].b > list[i].a) wonB += 1;
+    if (wonA === 2 || wonB === 2) { cut = i + 1; break; }
+  }
+  return { games: list.slice(0, cut), dropped: list.length - cut };
+}
+
+/**
+ * Газрын табууд (logic.seriesState-ээс): 1, 2 үргэлж; 3-р газар 1 : 1 болсон (эсвэл аль хэдийн оноотой) үед.
+ * enabled: дараалал алгасахгүй (n ≤ тоглосон + 1), шийдэгдсэн цувралд шинэ газар нэмэхгүй.
+ */
+export function gameTabs(s) {
+  const games = (s && Array.isArray(s.games)) ? s.games : [];
+  const maps = (s && Array.isArray(s.maps)) ? s.maps : [];
+  const show3 = games.length >= 3 || (!!s && s.wonA === 1 && s.wonB === 1);
+  const out = [];
+  for (let n = 1; n <= (show3 ? 3 : 2); n++) {
+    const g = games[n - 1] || null;
+    out.push({
+      n, map: (g && g.map) || maps[n - 1] || null, a: g ? g.a : null, b: g ? g.b : null, played: !!g,
+      enabled: n <= games.length + 1 && !(!!s && s.decided && n > games.length),
+    });
+  }
+  return out;
+}
+
+/** Анхдагч таб: шийдэгдсэн бол сүүлийн газар, эс бөгөөс тоглогдож буй (дараагийн) газар. */
+export function defaultGame(s) {
+  const n = (s && Array.isArray(s.games)) ? s.games.length : 0;
+  return s && s.decided ? Math.max(1, n) : Math.min(3, n + 1);
+}
+
+const otherOf = (s) => (s === 'a' ? 'b' : 'a');
+
+/** Тал сонгох баг (стандарт): 1-р газар (эхэлсэн багийн сонголт) — нөгөө баг, 2-р газар — эхэлсэн баг; 3-р газар хутга (null). */
+export function sideChooser(first, game) {
+  if (first !== 'a' && first !== 'b') return null;
+  return game === 1 ? otherOf(first) : game === 2 ? first : null;
+}
+
+/** MatchZy map_sides утга: team1 = team_a (хуваарьт эхэнд бичигдсэн), team2 = team_b. */
+export function matchzySide(chooser, choice) {
+  if ((chooser !== 'a' && chooser !== 'b') || (choice !== 'ct' && choice !== 't')) return null;
+  return `${chooser === 'a' ? 'team1' : 'team2'}_${choice}`;
+}
+
+/**
+ * MatchZy Bo3 JSON-ий мөрүүд (бэлдсэн final_A.json / 3-r-bair_B.json-д ижил нэртэй мөрийг солино). Сонгоогүй тал
+ * «<choose>» — таахгүй; ийм JSON-ийг MatchZy ачаалахгүй. choices = {1: 'ct'|'t', 2: 'ct'|'t'}.
+ */
+export function bo3JsonLines(maps, first, choices) {
+  const ids = [0, 1, 2].map((i) => (maps && maps[i] ? mapInfo(maps[i]).id : '<map>'));
+  const sides = [1, 2].map((g) => matchzySide(sideChooser(first, g), choices && choices[g]) || '<choose>');
+  return [
+    '"num_maps": 3,',
+    `"maplist": ["${ids.join('", "')}"],`,
+    `"map_sides": ["${sides[0]}", "${sides[1]}", "knife"],`,
+    '"clinch_series": true,',
+  ];
+}
+
+/** Дараалал/алдааны жагсаалтын мөр (Bo1-ийн мөр өмнөхтэй яг ижил). */
+export function entryText(e) {
+  if (!e) return '';
+  if (e.action === 'live') return `№${e.no}: эхэлсэн`;
+  if (e.action === 'games') {
+    const g = Array.isArray(e.games) ? e.games : [];
+    return `№${e.no}: ${g.length ? `газрууд ${gamesText(g)}` : 'газрын оноог устгах'}`;
+  }
+  if (e.a == null || e.b == null) return `№${e.no}: ${e.forfeit ? 'техникийн ялагдал (цуврал 2 : 0)' : 'цувралын дүн'}${e.action === 'final' ? ' — эцсийн' : ''}`;
+  return `№${e.no}: ${e.a} : ${e.b}${e.forfeit ? ' (техникийн)' : ''}${e.action === 'final' ? ' — эцсийн' : ''}`;
+}
+
+export function validEntry(e) {
+  return !!e && typeof e.id === 'string' && Number.isInteger(e.no) && ACTIONS.includes(e.action)
+    && (e.action !== 'games' || validGames(e.games));
+}
+
+/**
+ * Дараалалд нэмнэ: шинэ 'report' нь ижил тоглолтын хуучин 'report'-ыг, шинэ 'final' нь хуучин 'final'-ыг, шинэ 'games'
+ * (Bo3-ийн бүтэн жагсаалт) нь хуучин 'games'-ийг орлоно — хамгийн сүүлийн жагсаалт ялна.
+ */
 export function enqueueEntry(queue, entry) {
   let q = (queue || []).filter(validEntry);
   if (entry.action === 'live') {
@@ -135,7 +271,34 @@ export function applyQueue(matches, queue) {
     if (!es) return m;
     const out = { ...m, pending: es.length };
     for (const e of es) {
-      if (e.action === 'live') { if (!isDone(out)) out.status = 'live'; } else {
+      if (e.action === 'live') { if (!isDone(out)) out.status = 'live'; } else if (e.action === 'games') {
+        // Bo3: газрууд (газрын нэр серверийнхээс эсвэл m.maps-аас); шийдэгдвэл 'reported' + цувралын оноо, үгүй бол 'live'
+        const prev = Array.isArray(out.games) ? out.games : [];
+        const maps = Array.isArray(m.maps) ? m.maps : [];
+        out.games = e.games.map((g, i) => ({ a: g.a, b: g.b, map: (prev[i] && prev[i].map) || maps[i] || null }));
+        const t = checkSeries(m.stage, out.games);
+        out.forfeit = null;
+        out.ot = false;
+        if (t.ok && t.decided) {
+          if (out.status !== 'final') out.status = 'reported';
+          out.score_a = t.wonA;
+          out.score_b = t.wonB;
+        } else {
+          if (out.status !== 'final') out.status = 'live';
+          out.score_a = null;
+          out.score_b = null;
+        }
+      } else if (isBo3(m)) {
+        // Bo3: 'report' = цувралын техникийн ялагдал (2 : 0), 'final' = шийдэгдсэн цувралыг батлах (оноо илгээхгүй)
+        out.status = e.action === 'final' ? 'final' : 'reported';
+        if (e.forfeit) {
+          out.forfeit = e.forfeit;
+          out.score_a = e.forfeit === 'a' ? 0 : 2;
+          out.score_b = e.forfeit === 'a' ? 2 : 0;
+          out.games = [];
+          out.ot = false;
+        }
+      } else {
         out.status = e.action === 'final' ? 'final' : 'reported';
         out.score_a = e.a;
         out.score_b = e.b;
@@ -154,7 +317,7 @@ export function isTransient(err) {
 }
 
 /* ---------- map veto */
-const VETO_KEYS = ['veto_first', 'veto_coin', 'veto', 'map'];
+const VETO_KEYS = ['veto_first', 'veto_coin', 'veto', 'map', 'maps'];
 export const VETO_OFF_TEXT = 'Газрын зургийн систем хараахан идэвхжээгүй байна. Зохион байгуулагчид хэлнэ үү.';
 
 /** RPC байхгүй (DB шилжилт хийгдээгүй): PostgREST 404 → api.rpc 'http_404' шиднэ. */
@@ -164,6 +327,8 @@ export function isMissingRpc(err) { return String((err && err.message) || '') ==
 export function vetoAccess(m, ref) {
   if (!m || m.status === 'final') return { can: false, chief: false, reason: 'final' };
   const chief = !!(ref && ref.chief);
+  // Bo3: газрын оноо орсон бол газрын жагсаалтыг зөвхөн админ өөрчилнө (сервер: forbidden games_started)
+  if (isBo3(m) && Array.isArray(m.games) && m.games.length) return { can: false, chief, reason: 'games_started' };
   if (!chief && ref && ref.station && m.station && m.station !== ref.station) return { can: false, chief, reason: 'other_station' };
   if (!chief && m.status !== 'scheduled' && m.status !== 'live') return { can: false, chief, reason: 'already_reported' };
   return { can: true, chief, reason: null };
@@ -181,11 +346,24 @@ export function mergeVeto(matches, no, fields) {
   return (matches || []).map((m) => (m && m.no === no ? { ...m, ...fields } : m));
 }
 
-/** Хавтан бүр: {key, name, ban:{side, order}|null, play} — pool-ийн дарааллаар. */
+/**
+ * Хавтан бүр: {key, name, ban:{side, order}|null, play, pick:{side, game}|null, decider} — pool-ийн дарааллаар.
+ * order = хэд дэх хасалт. Bo3: сонгосон газар pick (game 1 | 2), үлдсэн нь decider (3-р газар), play үргэлж false.
+ */
 export function vetoTiles(v, pool) {
-  const by = new Map(((v && v.steps) || []).map((s, i) => [s.map, { side: s.side, order: i + 1 }]));
-  const keys = Array.isArray(pool) && pool.length ? pool : [...((v && v.banned) || []), ...((v && v.remaining) || [])];
-  return keys.map((key) => ({ key, name: mapInfo(key).name, ban: by.get(key) || null, play: !!(v && v.done && v.map === key) }));
+  const acts = (v && Array.isArray(v.acts)) ? v.acts : [];
+  const ban = new Map();
+  const pick = new Map();
+  ((v && v.steps) || []).forEach((s, i) => {
+    if (acts[i] === 'pick') pick.set(s.map, { side: s.side, game: pick.size + 1 });
+    else ban.set(s.map, { side: s.side, order: ban.size + 1 });
+  });
+  const bo3 = !!v && v.bo === 3;
+  const keys = Array.isArray(pool) && pool.length ? pool : [...((v && v.steps) || []).map((s) => s.map), ...((v && v.remaining) || [])];
+  return keys.map((key) => ({
+    key, name: mapInfo(key).name, ban: ban.get(key) || null, play: !bo3 && !!(v && v.done && v.map === key),
+    pick: pick.get(key) || null, decider: bo3 && !!(v && v.done && v.remaining && v.remaining[0] === key),
+  }));
 }
 
 /** «Багш нарын баг» → «Багш нар» (хавтан дээрх богино нэр). */
@@ -202,6 +380,9 @@ export function maplistCmd(key) { return `"maplist": ["${mapInfo(key).id}"]`; }
  * төхөөрөмж сольсон бол сервер 'stale' буцаана — хасалт нөгөө багийнх болж бичигдэхгүй.
  */
 export function vetoBanArgs(v, map) { return { map, step: v.steps.length, side: v.next ? v.next.side : null }; }
+
+/** Энэ алхмын үйлдэл: 'pick' (Bo3-ийн 3, 4-р алхам) эсвэл 'ban'. */
+export function vetoAct(v) { return v && v.nextAct === 'pick' ? 'pick' : 'ban'; }
 
 /**
  * Дууссан хасалтыг товч (газрын зураг + команд) харуулах уу. Явагдаж буй хасалт — үгүй (бүтэн самбар).
@@ -228,12 +409,17 @@ export function vetoErrorText(r) {
       veto_done: 'Хасалт аль хэдийн дууссан.',
       veto_empty: 'Буцаах хасалт алга.',
       other_station: 'Энэ тоглолт өөр станцынх.',
+      games_started: 'Газрын оноо орсон тул газрын зургийн сонголтыг өөрчлөхгүй. Шаардлагатай бол зохион байгуулагч засна.',
+      pool_small: 'Bo3-д дор хаяж 5 газрын зураг хэрэгтэй. Зохион байгуулагчид хэлнэ үү.',
     }[r.reason];
     return reason || 'Энэ үйлдлийг хийх эрхгүй.';
   }
+  if (code === 'stale' && (r.act === 'pick' || r.act === 'ban')) {
+    return `${errorText(r)} Энэ алхамд газрын зураг ${r.act === 'pick' ? 'сонгоно' : 'хасна'}.`;
+  }
   if (code === 'validation') {
     const e = (Array.isArray(r.errors) && r.errors[0]) || {};
-    if (e.field === 'map' && e.code === 'taken') return 'Энэ газрын зураг аль хэдийн хасагдсан.';
+    if (e.field === 'map' && e.code === 'taken') return 'Энэ газрын зураг аль хэдийн хасагдсан эсвэл сонгогдсон.';
     if (e.field === 'map') return 'Газрын зураг буруу байна.';
     if (e.field === 'side') return 'Эхлэх баг буруу байна.';
     return 'Мэдээлэл буруу байна. Ерөнхий шүүгчид хэлнэ үү.';
@@ -246,6 +432,7 @@ export const _test = {
   cleanToken, tokenTag, isKnockout, isDone, statusKey, sortMatches, pickCurrent, stageLabel, srcLabel, sourceText, scoreHint,
   checkScore, validEntry, enqueueEntry, applyQueue, isTransient,
   isMissingRpc, vetoAccess, vetoFields, mergeVeto, vetoTiles, shortTeam, serverCmd, maplistCmd, vetoBanArgs, vetoCollapsed, vetoErrorText,
+  isBo3, validGames, gamesText, checkSeries, setGame, gameTabs, defaultGame, sideChooser, matchzySide, bo3JsonLines, entryText, vetoAct,
 };
 
 /* ================================================================== storage & modal */
@@ -326,6 +513,8 @@ function createRefPage(root, params) {
     // хасалт: илгээж буй эсэх, сонгосон хавтан {no, map, step}, RPC байхгүй, сүүлийн амжилттай хариу (no → {at, fields}), дахин ачаалах,
     // дууссан хасалтын харагдац {no, status, open} (өөр тоглолт эсвэл төлөв өөрчлөгдвөл анхдагч — товч)
     vetoBusy: false, vetoSel: null, vetoOff: false, vetoPatch: new Map(), again: false, vetoView: null,
+    // Bo3: сонгосон газрын таб (no → 1…3), MatchZy-ийн талын сонголт (no → {fp, 1, 2}; энэ төхөөрөмжид л, DB-д биш)
+    gameSel: new Map(), sides: null,
   };
   const el = { quick: {}, score: {} };
   const prevTitle = document.title;
@@ -478,6 +667,11 @@ function createRefPage(root, params) {
   }
   function queueAdd(entry) { S.q = enqueueEntry(S.q, entry); persistQ(); }
 
+  /** Нэг үйлдлийг сервер рүү: Bo3-ийн газрууд — cs2_ref_games (бүтэн жагсаалт), бусад — cs2_ref_report. */
+  function callEntry(e) {
+    return e.action === 'games' ? refGames(S.token, e.no, e.games) : refReport(S.token, e.no, e.action, e.a, e.b, e.forfeit, e.ta, e.tb);
+  }
+
   async function flush(manual) {
     if (S.flushing || S.dead || !S.q.length || !S.token) return;
     S.flushing = true;
@@ -488,7 +682,7 @@ function createRefPage(root, params) {
       const e = S.q[0];
       let r = null;
       let err = null;
-      try { r = await refReport(S.token, e.no, e.action, e.a, e.b, e.forfeit, e.ta, e.tb); } catch (x) { err = x; }
+      try { r = await callEntry(e); } catch (x) { err = x; }
       if (S.dead) return;
       if (err && isTransient(err)) { stopped = true; S.netError = true; break; }
       S.q = S.q.filter((x) => x.id !== e.id);
@@ -549,7 +743,11 @@ function createRefPage(root, params) {
 
   function reportErrorText(r) {
     const code = r && r.error;
-    if (code === 'invalid_score') return 'Оноо дүрэмд нийцэхгүй байна.';
+    if (code === 'invalid_score') {
+      if (r.reason === 'undecided') return 'Цуврал шийдэгдээгүй байна: 3 газрын зургаас 2-т түрүүлж хожсон баг ялна.';
+      if (r.reason === 'series') return 'Цувралын оноо дүрэмд нийцэхгүй: 2 газрын зураг хожсоны дараа газар тоглогдохгүй.';
+      return r.game ? errorText(r) : 'Оноо дүрэмд нийцэхгүй байна.';
+    }
     if (code === 'forbidden') {
       if (r.reason === 'other_station') return 'Энэ тоглолт өөр станцынх.';
       if (r.reason === 'already_reported') return 'Оноо аль хэдийн илгээгдсэн байна.';
@@ -581,13 +779,13 @@ function createRefPage(root, params) {
     let retry = true;
     if (code === 'network') { title = 'Холболт амжилтгүй'; text = 'Интернэтээ шалгаад дахин оролдоно уу.'; }
     if (code === 'bad_token') { title = 'Холбоос хүчингүй байна'; text = 'Зохион байгуулагчаас шинэ QR код авна уу.'; retry = false; }
-    if (code === 'expired') { title = 'Холбоос идэвхгүй байна'; text = 'Шүүгчийн холбоос 10.24 07:00 – 10.25 18:00 хооронд ажиллана.'; retry = false; }
+    if (code === 'expired') { title = 'Холбоос идэвхгүй байна'; text = 'Шүүгчийн холбоос 10.24 07:00 – 10.25 20:00 хооронд ажиллана.'; retry = false; }
     const pending = S.q.slice();
     root.appendChild(h('section', { class: 'card error k-fatal', role: 'alert' },
       h('h1', {}, title), h('p', {}, text),
       pending.length ? h('div', { class: 'r-lost' },
         h('p', {}, h('b', {}, `Илгээгдээгүй ${pending.length} үйлдэл байна. Зохион байгуулагчид хэлнэ үү:`)),
-        h('ul', {}, pending.map((e) => h('li', {}, e.action === 'live' ? `№${e.no}: эхэлсэн` : `№${e.no}: ${e.a} : ${e.b}${e.forfeit ? ' (техникийн)' : ''}${e.action === 'final' ? ' — эцсийн' : ''}`)))) : null,
+        h('ul', {}, pending.map((e) => h('li', {}, entryText(e))))) : null,
       h('div', { class: 'row' },
         retry ? h('button', { type: 'button', class: 'btn', onclick: () => { renderFrame(); el.detail.append(h('p', { class: 'muted loading' }, 'Ачаалж байна…')); load(false); } }, 'Дахин оролдох') : null,
         h('a', { class: 'btn secondary', href: '#/' }, 'Нүүр хуудас'))));
@@ -615,10 +813,10 @@ function createRefPage(root, params) {
     renderHead();
     renderFailures();
     renderFilter();
-    const fpList = JSON.stringify([S.sel, S.filter, list.map((m) => [m.no, m.status, m.score_a, m.score_b, m.forfeit, m.pending, sideName(m, 'a'), sideName(m, 'b')])]);
+    const fpList = JSON.stringify([S.sel, S.filter, list.map((m) => [m.no, m.status, m.score_a, m.score_b, m.forfeit, m.pending, sideName(m, 'a'), sideName(m, 'b'), m.games || null])]);
     if (force || fpList !== S.fp.list) { S.fp.list = fpList; renderList(list); }
     const m = list.find((x) => x.no === S.sel) || null;
-    const fpDet = JSON.stringify([S.sel, m, m && sideName(m, 'a'), m && sideName(m, 'b'), S.busy, !!S.ref.chief, S.filter]);
+    const fpDet = JSON.stringify([S.sel, m, m && sideName(m, 'a'), m && sideName(m, 'b'), S.busy, !!S.ref.chief, S.filter, m && S.gameSel.get(m.no)]);
     if (force || fpDet !== S.fp.detail) { S.fp.detail = fpDet; renderDetail(m, list); }
   }
 
@@ -651,7 +849,7 @@ function createRefPage(root, params) {
     if (!S.failures.length) return;
     add(el.fail,
       h('strong', {}, 'Дараах илгээлт амжилтгүй боллоо:'),
-      h('ul', {}, S.failures.map((f) => h('li', {}, `№${f.no} (${f.action === 'live' ? 'эхэлсэн' : f.action === 'final' ? 'эцсийн' : 'оноо'}): ${f.text}`))),
+      h('ul', {}, S.failures.map((f) => h('li', {}, `№${f.no} (${f.action === 'live' ? 'эхэлсэн' : f.action === 'final' ? 'эцсийн' : f.action === 'games' ? 'газрын оноо' : 'оноо'}): ${f.text}`))),
       h('p', { class: 'small' }, 'Оноог шалгаад дахин илгээнэ үү. Шаардлагатай бол ерөнхий шүүгчид хэлнэ үү.'),
       h('button', { type: 'button', class: 'btn secondary', onclick: () => { S.failures = []; renderFailures(); } }, 'Ойлголоо'));
   }
@@ -703,7 +901,7 @@ function createRefPage(root, params) {
       h('span', { class: 'r-item-main' },
         h('span', { class: 'r-item-teams' }, `${sideName(m, 'a')} – ${sideName(m, 'b')}`),
         h('span', { class: 'r-item-sub' }, stageLabel(m) + (S.ref.chief ? ` · ${stationLabel(m.station)}` : ''))),
-      h('span', { class: 'r-item-state' }, isDone(m) ? h('b', {}, scoreText(m)) : null, statusChip(m)))));
+      h('span', { class: 'r-item-state' }, isDone(m) ? h('b', {}, scoreText(m)) : liveSeriesText(m) ? h('b', {}, liveSeriesText(m)) : null, statusChip(m)))));
     }
     if (!shown.length) el.list.append(h('p', { class: 'muted' }, 'Тоглолт алга.'));
   }
@@ -718,9 +916,66 @@ function createRefPage(root, params) {
   function syncOt(m, e) { if (KO.has(m.stage) && Math.max(e.a || 0, e.b || 0) >= 16) e.ot = true; }
   function otMark(m, e) { return KO.has(m.stage) && !e.forfeit && Math.max(e.a || 0, e.b || 0) >= 16 ? ' (OT)' : ''; }
 
+  /* ---------- Bo3 цуврал ---------- */
+  function series(m) {
+    try { return seriesState(m, mapPool(store.get())); } catch (x) {
+      return { bo: 3, games: [], wonA: 0, wonB: 0, decided: false, winner: null, maps: [], current: 0, currentMap: null, valid: false };
+    }
+  }
+  /** Жагсаалтад: явагдаж буй Bo3-ийн газрын тоо («1 : 0»); бусад үед ''. */
+  function liveSeriesText(m) {
+    if (!isBo3(m) || isDone(m)) return '';
+    const s = series(m);
+    return s.games.length ? `${s.wonA} : ${s.wonB}` : '';
+  }
+  function gamesToast(item) {
+    if (item.drop) return `${item.game}-р газрын оноо устгагдлаа.`;
+    if (!item.games.length) return 'Газрын оноо устгагдлаа.';
+    const t = checkSeries('final', item.games);
+    const n = item.game || item.games.length;
+    return t.decided ? `${n}-р газрын оноо илгээгдлээ. Цуврал шийдэгдлээ: ${t.wonA} : ${t.wonB}.` : `${n}-р газрын оноо илгээгдлээ.`;
+  }
+  /** Сонгосон газрын таб (1…3): хэрэглэгчийн сонголт хүчинтэй бол түүнийг, эс бөгөөс тоглогдож буй газар. */
+  function selGame(m, s) {
+    const tabs = gameTabs(s);
+    const n = S.gameSel.get(m.no);
+    return tabs.some((t) => t.n === n && t.enabled) ? n : defaultGame(s);
+  }
+  /** n-р газрын засвар (түлхүүр «no:n»; Bo1-ийн засвар m.no-оор тусдаа). */
+  function gameEdit(m, n, g) {
+    const key = `${m.no}:${n}`;
+    const fp = JSON.stringify([m.status, g ? g.a : null, g ? g.b : null]);
+    let e = S.edits.get(key);
+    if (!e || (!e.touched && e.fp !== fp)) {
+      const has = !!g && Number.isInteger(g.a) && Number.isInteger(g.b);
+      e = { a: has ? g.a : 0, b: has ? g.b : 0, forfeit: null, ot: has && Math.max(g.a, g.b) >= 16, touched: false, fp };
+      S.edits.set(key, e);
+    }
+    return e;
+  }
+  const gameMapName = (map) => (map ? mapInfo(map).name : '');
+  const gameLabel = (n, map) => `${n}-р газар${map ? ` · ${gameMapName(map)}` : ''}`;
+
+  function refreshSeriesState(m) {
+    const s = series(m);
+    const n = selGame(m, s);
+    const e = gameEdit(m, n, s.games[n - 1]);
+    const res = checkScore(m.stage, e.a, e.b, null, e.ot);
+    el.hint.textContent = res.ok ? `${n}-р газар: ${sideName(m, 'a')} ${e.a} : ${e.b} ${sideName(m, 'b')}${otMark(m, e)}` : res.msg;
+    el.hint.className = `r-hint ${res.ok ? 'ok' : e.touched ? 'err' : 'muted'}`;
+    if (el.send) el.send.disabled = S.busy || !res.ok;
+    if (el.finalBtn) el.finalBtn.disabled = S.busy || !s.decided;
+    if (el.ot) el.ot.checked = !!e.ot;
+    for (const k of ['a', 'b']) {
+      if (el.score[k] && document.activeElement !== el.score[k]) el.score[k].value = e[k] == null ? '' : String(e[k]);
+      if (el.quick[k]) { const t = quickTarget(m, e); el.quick[k].textContent = String(t); el.quick[k].setAttribute('aria-label', `${sideName(m, k)}: ${t} оноо`); }
+    }
+  }
+
   function refreshDetailState() {
     const m = currentMatch();
     if (!m || !el.hint) return;
+    if (isBo3(m)) { refreshSeriesState(m); return; }
     const e = editFor(m);
     const res = checkScore(m.stage, e.a, e.b, e.forfeit, e.ot);
     el.hint.textContent = res.ok ? `${sideName(m, 'a')} ${e.a} : ${e.b} ${sideName(m, 'b')}${e.forfeit ? ' (техникийн)' : otMark(m, e)}` : res.msg;
@@ -798,7 +1053,7 @@ function createRefPage(root, params) {
       add(el.detail,
         h('div', { class: 'r-final' },
           h('div', { class: 'r-final-teams' }, h('span', {}, A.name), h('b', { class: 'r-final-score' }, scoreText(m) || '—'), h('span', {}, B.name)),
-          m.map ? h('p', { class: 'r-final-map' }, `Газрын зураг: ${mapInfo(m.map).name}`) : null,
+          isBo3(m) ? seriesMapLines(m) : m.map ? h('p', { class: 'r-final-map' }, `Газрын зураг: ${mapInfo(m.map).name}`) : null,
           h('p', { class: 'small muted' }, 'Дүн баталгаажсан. Өөрчлөх бол зохион байгуулагчид хандана уу.')),
         next ? h('button', { type: 'button', class: 'btn secondary block r-big', onclick: () => select(next.no) }, 'Дараагийн тоглолт →') : null);
       return;
@@ -813,6 +1068,7 @@ function createRefPage(root, params) {
     if (key === 'scheduled') {
       el.detail.append(h('button', { type: 'button', class: 'btn block r-big r-live', disabled: S.busy, onclick: () => send({ no: m.no, action: 'live', a: null, b: null, forfeit: null, ta: null, tb: null }) }, '▶ Эхэлсэн'));
     }
+    if (isBo3(m)) { renderSeries(m, key, A, B, next); return; }
     const sides = h('div', { class: 'r-sides' }, sideBlock(m, e, 'a', A), h('div', { class: 'r-vs', 'aria-hidden': 'true' }, ':'), sideBlock(m, e, 'b', B));
     el.detail.append(sides);
     if (ko) {
@@ -841,6 +1097,155 @@ function createRefPage(root, params) {
     refreshDetailState();
   }
 
+  /** Bo3: цувралын толгой (газрын тоо, газар бүрийн оноо), газрын табууд, сонгосон газрын оноо, илгээх / устгах / батлах. */
+  function renderSeries(m, key, A, B, next) {
+    const s = series(m);
+    const n = selGame(m, s);
+    const tabs = gameTabs(s);
+    const g = s.games[n - 1] || null;
+    const e = gameEdit(m, n, g);
+    const tab = tabs.find((t) => t.n === n) || { n, map: null };
+    add(el.detail,
+      h('div', { class: 'r-series', role: 'group', 'aria-label': 'Bo3 цуврал' },
+        h('div', { class: 'r-series-top' },
+          h('span', { class: 'chip gold' }, 'Bo3'),
+          h('span', { class: 'r-series-teams' }, h('span', {}, A.name), h('b', { class: 'r-series-score' }, `${s.wonA} : ${s.wonB}`), h('span', {}, B.name))),
+        seriesMapLines(m, s),
+        h('p', { class: 'small muted r-series-rule' }, s.decided ? 'Цуврал шийдэгдсэн.' : '3 газрын зургаас 2-т түрүүлж хожсон баг ялна. Газар бүр MR12 + нэмэлт цаг (MR3).')),
+      h('div', { class: 'r-games', role: 'tablist', 'aria-label': 'Газрууд' }, tabs.map((t) => h('button', {
+        type: 'button', role: 'tab', class: `r-game-tab${t.n === n ? ' on' : ''}${t.played ? ' played' : ''}`,
+        'aria-selected': t.n === n ? 'true' : 'false', disabled: !t.enabled || S.busy,
+        onclick: () => { S.gameSel.set(m.no, t.n); renderAll(true); },
+      }, h('b', {}, `${t.n}-р газар`), h('small', {}, t.map ? gameMapName(t.map) : '—'), t.played ? h('small', { class: 'r-game-sc' }, `${t.a} : ${t.b}`) : null))));
+    if (m.forfeit === 'a' || m.forfeit === 'b') {
+      el.detail.append(h('p', { class: 'card warn r-unknown' }, `Техникийн ялагдал: ${sideName(m, m.forfeit)}. Цуврал ${s.wonA} : ${s.wonB}.`));
+    }
+    const sides = h('div', { class: 'r-sides' }, sideBlock(m, e, 'a', A), h('div', { class: 'r-vs', 'aria-hidden': 'true' }, ':'), sideBlock(m, e, 'b', B));
+    el.detail.append(h('h3', { class: 'r-game-h' }, `${gameLabel(n, tab.map)} — оноо`), sides);
+    el.ot = h('input', {
+      type: 'checkbox', id: 'r-ot', checked: !!e.ot, disabled: S.busy,
+      onchange: () => {
+        e.ot = el.ot.checked;
+        e.touched = true;
+        if (!e.ot && Math.max(e.a || 0, e.b || 0) >= 16) { e.ot = true; toast('Оноо 16 ба түүнээс дээш бол нэмэлт цаг болсон гэсэн үг.', 'info'); }
+        refreshDetailState();
+      },
+    });
+    el.detail.append(h('label', { class: 'r-ot', for: 'r-ot' }, el.ot, h('span', {}, 'Нэмэлт цаг (OT) болсон')));
+    el.hint = h('p', { class: 'r-hint', 'aria-live': 'polite' });
+    el.detail.append(el.hint);
+    el.send = h('button', { type: 'button', class: 'btn gold block r-big r-send', onclick: () => confirmGame(m, n) },
+      g ? `${n}-р газрын засварыг илгээх` : `${n}-р газрын оноо илгээх`);
+    const actions = h('div', { class: 'r-actions' }, el.send);
+    if (S.ref.chief) {
+      el.finalBtn = h('button', { type: 'button', class: 'btn block r-big', onclick: () => confirmSeriesFinal(m) }, 'Эцэслэн батлах');
+      actions.append(el.finalBtn);
+    }
+    if (g && n === s.games.length) {
+      actions.append(h('button', { type: 'button', class: 'btn secondary block r-drop', disabled: S.busy, onclick: () => confirmDropLast(m) }, `${n}-р газрын оноог устгах`));
+    }
+    actions.append(h('button', { type: 'button', class: 'btn secondary block r-ff-btn', disabled: S.busy, onclick: () => pickForfeit(m) }, 'Техникийн ялагдал'));
+    if (key === 'reported' && next) actions.append(h('button', { type: 'button', class: 'btn secondary block', onclick: () => select(next.no) }, 'Дараагийн тоглолт →'));
+    el.detail.append(actions);
+    refreshDetailState();
+  }
+
+  /** Bo3-ийн газрууд: «Inferno 13 : 9», «Nuke 9 : 13», «Mirage — одоо / тоглогдоогүй». Газрын нэргүй бол «N-р газар». */
+  function seriesMapLines(m, s0) {
+    const s = s0 || series(m);
+    const ol = h('ol', { class: 'r-series-maps' });
+    for (let i = 0; i < 3; i++) {
+      const g = s.games[i] || null;
+      const map = (g && g.map) || (s.maps && s.maps[i]) || null;
+      if (!g && !map) continue;
+      ol.append(h('li', { class: g ? `won-${g.winner}` : 'todo' },
+        h('span', { class: 'r-sm-map' }, map ? gameMapName(map) : `${i + 1}-р газар`),
+        h('b', { class: 'r-sm-sc' }, g ? `${g.a} : ${g.b}${g.ot ? ' (OT)' : ''}` : s.decided ? 'тоглогдоогүй' : i === s.current ? 'одоо' : '—')));
+    }
+    return ol.childNodes.length ? ol : null;
+  }
+
+  function confirmGame(m, n) {
+    const s = series(m);
+    const e = gameEdit(m, n, s.games[n - 1]);
+    const res = checkScore(m.stage, e.a, e.b, null, e.ot);
+    if (!res.ok) { toast(res.msg, 'err', 5000); return; }
+    const built = setGame(s.games, n, e.a, e.b);
+    if (!built) { toast('Газрыг дарааллаар нь оруулна уу.', 'err', 5000); return; }
+    const chk = checkSeries(m.stage, built.games);
+    if (!chk.ok) { toast(chk.msg, 'err', 6000); return; }
+    const A = side(m, 'a');
+    const B = side(m, 'b');
+    const map = (s.games[n - 1] && s.games[n - 1].map) || (s.maps && s.maps[n - 1]) || null;
+    const tail = Math.max(e.a, e.b) >= 16 ? ' (OT)' : '';
+    const next3 = !chk.decided && chk.wonA === 1 && chk.wonB === 1;
+    const md = openModal({
+      title: 'Газрын оноо шалгах',
+      className: 'r-confirm',
+      body: [
+        h('p', { class: 'center r-confirm-game' }, `${stageLabel(m)} · ${gameLabel(n, map)}`),
+        h('p', { class: 'r-confirm-line' }, `${A.name} ${e.a} : ${e.b} ${B.name}${tail} — Зөв үү?`),
+        built.dropped ? h('p', { class: 'r-confirm-sub' }, `Цуврал ${n}-р газарт шийдэгдэх тул дараагийн газрын оноо (${built.dropped}) устна.`) : null,
+        h('p', { class: 'center' }, `Цуврал: ${A.name} ${chk.wonA} : ${chk.wonB} ${B.name}${chk.decided ? ' — шийдэгдэнэ.' : next3 ? ' — 3-р газар тоглоно.' : ''}`),
+        h('p', { class: 'small muted' }, `№${m.no} · ${stationLabel(m.station)}`),
+      ],
+      actions: [
+        h('button', {
+          type: 'button', class: 'btn gold block r-big', 'data-autofocus': '',
+          onclick: () => { md.close(); send({ no: m.no, action: 'games', games: built.games, game: n, a: null, b: null, forfeit: null, ta: null, tb: null }); },
+        }, 'Тийм, илгээх'),
+        h('button', { type: 'button', class: 'btn secondary block r-big', onclick: () => md.close() }, 'Үгүй, засах'),
+      ],
+    });
+  }
+
+  function confirmDropLast(m) {
+    const s = series(m);
+    const n = s.games.length;
+    if (!n) return;
+    const g = s.games[n - 1];
+    const md = openModal({
+      title: 'Газрын оноог устгах',
+      className: 'r-confirm',
+      body: [h('p', { class: 'r-confirm-line' }, `${gameLabel(n, g.map)}: ${g.a} : ${g.b}`), h('p', { class: 'center' }, 'Энэ газрын оноог устгах уу?'), vsLine(m)],
+      actions: [
+        h('button', {
+          type: 'button', class: 'btn danger block r-big',
+          onclick: () => {
+            md.close();
+            send({ no: m.no, action: 'games', games: s.games.slice(0, n - 1).map((x) => ({ a: x.a, b: x.b })), game: n, drop: true, a: null, b: null, forfeit: null, ta: null, tb: null });
+          },
+        }, 'Тийм, устгах'),
+        h('button', { type: 'button', class: 'btn secondary block r-big', 'data-autofocus': '', onclick: () => md.close() }, 'Болих'),
+      ],
+    });
+  }
+
+  /** Ерөнхий шүүгч: шийдэгдсэн цувралыг батлана (cs2_ref_report 'final', оноогүй — сервер хадгалсан цувралыг батална). */
+  function confirmSeriesFinal(m) {
+    const s = series(m);
+    if (!s.decided) { toast('Цуврал шийдэгдээгүй байна: 3 газрын зургаас 2-т түрүүлж хожсон баг ялна.', 'err', 5000); return; }
+    const A = side(m, 'a');
+    const B = side(m, 'b');
+    const md = openModal({
+      title: 'Эцсийн дүн',
+      className: 'r-confirm',
+      body: [
+        h('p', { class: 'r-confirm-line' }, `${A.name} ${s.wonA} : ${s.wonB} ${B.name}${m.forfeit ? ' (техникийн)' : ''} — Эцэслэн батлах уу?`),
+        s.games.length ? h('p', { class: 'center' }, gamesText(s.games)) : null,
+        h('p', { class: 'small muted' }, `№${m.no} · ${stageLabel(m)} · ${stationLabel(m.station)}`),
+        h('p', { class: 'small' }, 'Батлагдсан дүнг зөвхөн зохион байгуулагч өөрчилнө.'),
+      ],
+      actions: [
+        h('button', {
+          type: 'button', class: 'btn gold block r-big', 'data-autofocus': '',
+          onclick: () => { md.close(); send({ no: m.no, action: 'final', a: null, b: null, forfeit: null, ta: A.id, tb: B.id }); },
+        }, 'Тийм, батлах'),
+        h('button', { type: 'button', class: 'btn secondary block r-big', onclick: () => md.close() }, 'Үгүй, засах'),
+      ],
+    });
+  }
+
   function pickForfeit(m) {
     const A = side(m, 'a');
     const B = side(m, 'b');
@@ -848,7 +1253,9 @@ function createRefPage(root, params) {
       title: 'Техникийн ялагдал',
       body: [
         h('p', {}, 'Аль баг техникийн ялагдал хүлээх вэ?'),
-        h('p', { class: 'small muted' }, '10 минутаас илүү хоцорсон, ирээгүй эсвэл тоглох боломжгүй баг. Нөгөө баг 13 : 0 оноогоор ялна.'),
+        h('p', { class: 'small muted' }, isBo3(m)
+          ? '10 минутаас илүү хоцорсон, ирээгүй эсвэл тоглох боломжгүй баг. Нөгөө баг цувралыг 2 : 0-ээр хожно.'
+          : '10 минутаас илүү хоцорсон, ирээгүй эсвэл тоглох боломжгүй баг. Нөгөө баг 13 : 0 оноогоор ялна.'),
         h('div', { class: 'r-ff-choices' },
           h('button', { type: 'button', class: 'btn danger block r-big', onclick: () => { md.close(); confirmReport(m, 'report', 'a'); } }, A.name),
           h('button', { type: 'button', class: 'btn danger block r-big', onclick: () => { md.close(); confirmReport(m, 'report', 'b'); } }, B.name)),
@@ -858,6 +1265,28 @@ function createRefPage(root, params) {
   }
 
   function confirmReport(m, action, ff) {
+    if (isBo3(m)) {   // Bo3: зөвхөн цувралын техникийн ялагдал (газрын оноо — confirmGame, батлах — confirmSeriesFinal)
+      if (!ff) { if (action === 'final') confirmSeriesFinal(m); return; }
+      const A3 = side(m, 'a');
+      const B3 = side(m, 'b');
+      const md3 = openModal({
+        title: 'Оноо шалгах',
+        className: 'r-confirm',
+        body: [
+          h('p', { class: 'r-confirm-line' }, `${A3.name} ${ff === 'a' ? 0 : 2} : ${ff === 'a' ? 2 : 0} ${B3.name} (техникийн) — Зөв үү?`),
+          h('p', { class: 'r-confirm-sub' }, `${ff === 'a' ? A3.name : B3.name} техникийн ялагдал хүлээнэ.`),
+          h('p', { class: 'small muted' }, `№${m.no} · ${stageLabel(m)} · ${stationLabel(m.station)}`),
+        ],
+        actions: [
+          h('button', {
+            type: 'button', class: 'btn gold block r-big', 'data-autofocus': '',
+            onclick: () => { md3.close(); send({ no: m.no, action: 'report', a: null, b: null, forfeit: ff, ta: A3.id, tb: B3.id }); },
+          }, 'Тийм, илгээх'),
+          h('button', { type: 'button', class: 'btn secondary block r-big', onclick: () => md3.close() }, 'Үгүй, засах'),
+        ],
+      });
+      return;
+    }
     const e = editFor(m);
     let a = e.a;
     let b = e.b;
@@ -903,7 +1332,7 @@ function createRefPage(root, params) {
     renderAll();
     let r = null;
     let err = null;
-    try { r = await refReport(S.token, item.no, item.action, item.a, item.b, item.forfeit, item.ta, item.tb); } catch (x) { err = x; }
+    try { r = await callEntry(item); } catch (x) { err = x; }
     S.busy = false;
     if (S.dead) return;
     if (err) {
@@ -919,7 +1348,12 @@ function createRefPage(root, params) {
       S.netError = false;
       const ed = S.edits.get(item.no);
       if (ed) ed.touched = false;
-      toast(item.action === 'live' ? 'Тоглолт эхэллээ.' : item.action === 'final' ? 'Эцэслэн баталгаажлаа.' : 'Оноо илгээгдлээ. Баярлалаа!', 'ok');
+      if (item.action === 'games') {
+        for (let n = 1; n <= 3; n++) { const g = S.edits.get(`${item.no}:${n}`); if (g) g.touched = false; }
+        S.gameSel.delete(item.no);   // дараагийн (тоглогдож буй) газрын таб руу
+      }
+      toast(item.action === 'live' ? 'Тоглолт эхэллээ.' : item.action === 'final' ? 'Эцэслэн баталгаажлаа.' : item.action === 'games' ? gamesToast(item)
+        : 'Оноо илгээгдлээ. Баярлалаа!', 'ok');
       await load(true);
       renderAll(true);
       return;
@@ -956,6 +1390,15 @@ function createRefPage(root, params) {
 
   /** Дууссан хасалт, товч: газрын зураг, команд + «Хуулах», «Хасалтыг харах» — тоглолтын үеэр онооны хэсэг дэлгэцэнд үлдэнэ. */
   function vetoSummary(box, m, v) {
+    if (v.bo === 3) {
+      add(box,
+        h('h3', { class: 'r-veto-sum-h', id: 'r-veto-h' }, 'Газрууд: ', h('b', {}, v.maps.map((k) => mapInfo(k).name.toUpperCase()).join(' → '))),
+        serverRows(m, v),
+        h('div', { class: 'r-veto-cmd' }, h('button', {
+          type: 'button', class: 'r-veto-more', 'data-vk': 'toggle', 'aria-expanded': 'false', onclick: () => setVetoOpen(m.no, true),
+        }, 'Хасалт, сонголтыг харах', caret('▾'))));
+      return;
+    }
     add(box,
       h('h3', { class: 'r-veto-sum-h', id: 'r-veto-h' }, 'Газрын зураг: ', h('b', {}, mapInfo(v.map).name.toUpperCase())),
       serverRows(m, v),
@@ -970,12 +1413,81 @@ function createRefPage(root, params) {
    * ачаалсан бол консолын changelevel. Тоглолт эхэлсний дараа харуулахгүй — тоглолтын дундуур газрын зураг солигдохгүй.
    */
   function serverRows(m, v) {
+    if (v.bo === 3) return bo3Rows(m, v);
     if (m.status !== 'scheduled') return null;
     return [
       h('p', { class: 'small muted r-veto-cmd-l' }, 'Техникийн ахлагчид — match JSON-ий мөр:'),
       cmdRow(maplistCmd(v.map)),
       h('p', { class: 'small muted r-veto-cmd-l' }, 'JSON ачаалсан бол консолд (зөвхөн LIVE-аас өмнө):'),
       cmdRow(serverCmd(v.map)),
+    ];
+  }
+
+  /* Bo3 MatchZy: талын сонголт энэ төхөөрөмжид (localStorage, токены хэшээр), DB-д хадгалахгүй; хасалт өөрчлөгдвөл хоосорно */
+  function sidesStore() {
+    if (S.sides) return S.sides;
+    let o = null;
+    try { o = JSON.parse(sGet('local', SIDES_PREFIX + S.tag) || 'null'); } catch (e) { o = null; }
+    S.sides = o && typeof o === 'object' && !Array.isArray(o) ? o : {};
+    return S.sides;
+  }
+  const sidesFp = (v) => `${v.maps.join(',')}|${v.first}`;
+  function sideChoices(m, v) {
+    const rec = sidesStore()[m.no];
+    return rec && rec.fp === sidesFp(v) ? { 1: rec[1] || null, 2: rec[2] || null } : { 1: null, 2: null };
+  }
+  function setSideChoice(m, v, game, choice) {
+    const st = sidesStore();
+    const cur = st[m.no] && st[m.no].fp === sidesFp(v) ? st[m.no] : { fp: sidesFp(v) };
+    cur[game] = cur[game] === choice ? null : choice;   // ижил товчийг дахин дарвал болино
+    st[m.no] = cur;
+    sSet('local', SIDES_PREFIX + S.tag, JSON.stringify(st));
+    refreshVeto();
+  }
+
+  /**
+   * Bo3-ийн серверийн мөрүүд. Тоглолт эхлэхээс өмнө: 1, 2-р газрын талын сонголт + MatchZy JSON (num_maps, maplist,
+   * map_sides, clinch_series) — хоёр тал сонгогдох хүртэл «Хуулах» идэвхгүй. Явагдаж байхад: MatchZy цуврал ажиллахгүй
+   * үеийн нөөц — одоогийн газрын changelevel + тухайн газрын тал.
+   */
+  function bo3Rows(m, v) {
+    if (!v.done) return null;
+    if (m.status === 'scheduled') {
+      const ch = sideChoices(m, v);
+      const rows = [h('p', { class: 'small muted r-veto-cmd-l' }, 'Тал сонгох (MatchZy JSON-д; энэ утсанд л хадгална):')];
+      for (const game of [1, 2]) {
+        const who = sideChooser(v.first, game);
+        rows.push(h('div', { class: 'r-side-pick', role: 'group', 'aria-label': `${game}-р газрын тал` },
+          h('span', { class: 'r-side-pick-l' }, `${game}. ${gameMapName(v.maps[game - 1])} — `, h('b', {}, sideName(m, who)), ' сонгоно:'),
+          h('span', { class: 'r-side-btns' }, ['ct', 't'].map((c) => h('button', {
+            type: 'button', class: `r-side-btn ${c}${ch[game] === c ? ' on' : ''}`, 'data-vk': `side${game}${c}`,
+            'aria-pressed': ch[game] === c ? 'true' : 'false', 'aria-label': `${game}-р газар: ${sideName(m, who)} ${c.toUpperCase()}`,
+            onclick: () => setSideChoice(m, v, game, c),
+          }, c.toUpperCase())))));
+      }
+      rows.push(h('p', { class: 'r-side-pick r-side-knife' }, `3. ${gameMapName(v.maps[2])} — хутганы раунд`));
+      const lines = bo3JsonLines(v.maps, v.first, ch);
+      const ready = !!(ch[1] && ch[2]);
+      rows.push(h('p', { class: 'small muted r-veto-cmd-l' }, 'Техникийн ахлагчид — бэлдсэн match JSON-ий эдгээр мөрийг солино (давхардуулахгүй):'));
+      rows.push(h('div', { class: 'r-veto-cmd' },
+        h('code', { class: 'r-veto-code r-json' }, lines.join('\n')),
+        h('button', {
+          type: 'button', class: 'btn secondary r-veto-copy', disabled: !ready, 'aria-label': 'Хуулах: MatchZy JSON-ий мөрүүд',
+          onclick: () => copyText(lines.join('\n')),
+        }, 'Хуулах')));
+      if (!ready) rows.push(h('p', { class: 'small r-side-wait' }, 'Эхлээд 1, 2-р газрын талыг сонгоно уу. Сонгоогүй талыг систем таахгүй.'));
+      return rows;
+    }
+    const s = series(m);
+    if (m.status !== 'live' || s.decided || !s.currentMap) return null;
+    const n = s.current + 1;
+    const ch = sideChoices(m, v);
+    const who = sideChooser(v.first, n);
+    return [
+      h('p', { class: 'small muted r-veto-cmd-l' }, `MatchZy цуврал ажиллахгүй бол — ${gameLabel(n, s.currentMap)}, зөвхөн газрын хооронд консолд:`),
+      cmdRow(serverCmd(s.currentMap)),
+      h('p', { class: 'r-side-pick r-side-now' }, n === 3 ? 'Тал: хутганы раунд.'
+        : ch[n] ? `Тал: ${sideName(m, who)} ${ch[n].toUpperCase()} талаас эхэлнэ.` : `Тал: ${sideName(m, who)} сонгоно.`),
     ];
   }
 
@@ -1005,13 +1517,23 @@ function createRefPage(root, params) {
     const s0 = S.vetoSel;
     const sel = s0 && s0.no === m.no && s0.step === step && !v.done && v.remaining.includes(s0.map) ? s0.map : null;
     const pickable = acc.can && !!v.next;
+    const bo3 = v.bo === 3;
+    const pickStep = v.nextAct === 'pick';
 
     add(box, h('div', { class: 'r-veto-top' },
-      h('h3', { class: 'r-veto-h', id: 'r-veto-h' }, 'Газрын зураг'),
-      h('span', { class: 'chip r-veto-prog' }, `Хасалт ${step}/${v.total}`)));
+      h('h3', { class: 'r-veto-h', id: 'r-veto-h' }, bo3 ? 'Газрын зураг · Bo3' : 'Газрын зураг'),
+      h('span', { class: 'chip r-veto-prog' }, `${bo3 ? 'Алхам' : 'Хасалт'} ${step}/${v.total}`)));
     if (S.vetoOff) box.append(h('p', { class: 'r-veto-off', role: 'alert' }, VETO_OFF_TEXT));
 
-    if (v.done) {
+    if (v.done && bo3) {
+      const pickers = v.steps.filter((_, i) => v.acts[i] === 'pick').map((st) => st.side);
+      box.append(h('div', { class: 'r-veto-play' },
+        h('p', { class: 'r-veto-play-l' }, 'Тоглох газрууд:'),
+        h('ol', { class: 'r-veto-play-list' }, v.maps.map((k, i) => h('li', {},
+          h('b', {}, mapInfo(k).name.toUpperCase()),
+          h('small', {}, i < 2 && pickers[i] ? `${shortTeam(name(pickers[i]))} сонгосон` : 'шийдвэрлэх')))),
+        serverRows(m, v)));
+    } else if (v.done) {
       box.append(h('div', { class: 'r-veto-play' },
         h('p', { class: 'r-veto-play-l' }, 'Тоглох газрын зураг:'),
         h('p', { class: 'r-veto-play-map' }, mapInfo(v.map).name.toUpperCase()),
@@ -1028,37 +1550,46 @@ function createRefPage(root, params) {
           }, `${name(s)} эхэлнэ`)))));
       } else box.append(h('p', { class: 'r-veto-ask' }, 'Зоос шидээгүй байна'));
     } else {
-      box.append(h('p', { class: 'r-veto-turn', 'aria-live': 'polite' }, h('b', {}, name(v.next.side)), ' хасна'));
+      box.append(h('p', { class: `r-veto-turn${pickStep ? ' pick' : ''}`, 'aria-live': 'polite' }, h('b', {}, name(v.next.side)),
+        pickStep ? ` сонгоно (${v.picks.length + 1}-р газар)` : ' хасна'));
     }
+    if (bo3 && !v.done) box.append(h('p', { class: 'r-veto-first' }, 'Bo3: хасах, хасах, сонгох, сонгох, хасах, хасах → үлдсэн нь 3-р газар.'));
     if (ko && v.first && !v.done) box.append(h('p', { class: 'r-veto-first' }, `Зоос${v.coin ? ' (систем)' : ''}: ${name(v.first)} эхэлж хасна`));
     if (ko && v.first && !v.started && acc.can && !acc.chief) box.append(h('p', { class: 'small muted r-veto-note' }, 'Буруу бол ерөнхий шүүгч шинээр эхлүүлнэ.'));
     if (!ko && !v.started) box.append(h('p', { class: 'r-veto-first' }, 'Эхэнд бичигдсэн баг эхэлж хасна. Ээлжлэн 3, 3 хасаад үлдсэнд тоглоно.'));
 
     const grid = h('div', { class: 'r-veto-grid', role: 'group', 'aria-label': 'Газрын зургууд' });
     for (const t of vetoTiles(v, pool)) {
-      const on = pickable && !t.ban && !t.play;
+      const on = pickable && !t.ban && !t.play && !t.pick && !t.decider;
       const isSel = t.key === sel;
-      const by = t.ban ? shortTeam(name(t.ban.side)) : '';
+      const by = t.ban ? shortTeam(name(t.ban.side)) : t.pick ? shortTeam(name(t.pick.side)) : '';
       grid.append(h('button', {
-        type: 'button', class: `r-veto-tile${t.ban ? ' banned' : ''}${t.play ? ' play' : ''}${isSel ? ' sel' : ''}`,
+        type: 'button',
+        class: `r-veto-tile${t.ban ? ' banned' : ''}${t.play ? ' play' : ''}${t.pick ? ' pick' : ''}${t.decider ? ' decider' : ''}${isSel ? ` sel${pickStep ? ' sel-pick' : ''}` : ''}`,
         'data-vk': t.key, disabled: !on || busy, 'aria-pressed': on ? String(isSel) : null,
-        'aria-label': t.ban ? `${t.name}: ${by} хассан (${t.ban.order}-р хасалт)` : t.play ? `${t.name}: тоглоно` : null,
+        'aria-label': t.ban ? `${t.name}: ${by} хассан (${t.ban.order}-р хасалт)` : t.pick ? `${t.name}: ${t.pick.game}-р газар, ${by} сонгосон`
+          : t.decider ? `${t.name}: 3-р газар, шийдвэрлэх` : t.play ? `${t.name}: тоглоно` : null,
         onclick: on ? () => pickMap(m.no, t.key, step) : null,
       },
       h('span', { class: 'r-veto-name' }, t.name),
-      t.ban ? h('small', {}, `✕ ${by}`) : t.play ? h('small', {}, 'ТОГЛОНО') : isSel ? h('small', {}, 'Сонгосон') : null));
+      t.ban ? h('small', {}, `✕ ${by}`) : t.pick ? [h('small', {}, `${t.pick.game}-р газар`), h('small', {}, by)]
+        : t.decider ? [h('small', {}, '3-р газар'), h('small', {}, 'шийдвэрлэх')] : t.play ? h('small', {}, 'ТОГЛОНО') : isSel ? h('small', {}, 'Сонгосон') : null));
     }
     box.append(grid);
 
     if (pickable) {
       box.append(h('button', {
-        type: 'button', class: 'btn danger block r-big r-veto-go', disabled: busy || !sel,
+        type: 'button', class: `btn ${pickStep ? 'gold' : 'danger'} block r-big r-veto-go`, disabled: busy || !sel,
         onclick: () => {
           if (!sel) return;
-          vetoSend(m.no, 'ban', vetoBanArgs(v, sel),
-            (r) => (r.match && r.match.map ? `Тоглох газрын зураг: ${mapInfo(r.match.map).name}` : `${mapInfo(sel).name} хасагдлаа.`));
+          vetoSend(m.no, vetoAct(v), vetoBanArgs(v, sel), (r) => {
+            if (!bo3) return r.match && r.match.map ? `Тоглох газрын зураг: ${mapInfo(r.match.map).name}` : `${mapInfo(sel).name} хасагдлаа.`;
+            const mm = r.match && Array.isArray(r.match.maps) ? r.match.maps : [];
+            if (mm.length === 3) return `Газрууд: ${mm.map((k) => mapInfo(k).name).join(' → ')}`;
+            return pickStep ? `${mapInfo(sel).name} — ${v.picks.length + 1}-р газар.` : `${mapInfo(sel).name} хасагдлаа.`;
+          });
         },
-      }, busy ? 'Илгээж байна…' : sel ? `${mapInfo(sel).name} хасах` : 'Газрын зураг сонгоно уу'));
+      }, busy ? 'Илгээж байна…' : sel ? `${mapInfo(sel).name} ${pickStep ? 'сонгох' : 'хасах'}` : 'Газрын зураг сонгоно уу'));
     }
     if (acc.can && (v.started || (acc.chief && ko && v.first))) {
       box.append(h('div', { class: 'r-veto-tools' },
@@ -1066,6 +1597,7 @@ function createRefPage(root, params) {
         acc.chief ? h('button', { type: 'button', class: 'btn secondary r-veto-reset', disabled: busy, onclick: () => confirmReset(m) }, 'Шинээр эхлүүлэх') : null));
     }
     if (acc.reason === 'already_reported') box.append(h('p', { class: 'small muted r-veto-note' }, 'Оноо илгээсэн тул газрын зургийг зөвхөн ерөнхий шүүгч өөрчилнө.'));
+    if (acc.reason === 'games_started') box.append(h('p', { class: 'small muted r-veto-note' }, 'Газрын оноо орсон тул газрын зургийн сонголтыг өөрчлөхгүй (зөвхөн зохион байгуулагч).'));
     if (v.done) {
       box.append(h('button', {
         type: 'button', class: 'r-veto-more r-veto-less', 'data-vk': 'toggle', 'aria-expanded': 'true', onclick: () => setVetoOpen(m.no, false),
@@ -1131,10 +1663,11 @@ function createRefPage(root, params) {
     const last = v.steps[v.steps.length - 1];
     if (!last) return;
     const map = mapInfo(last.map).name;
+    const wasPick = v.acts[v.steps.length - 1] === 'pick';
     const md = openModal({
-      title: 'Хасалтыг буцаах',
+      title: wasPick ? 'Сонголтыг буцаах' : 'Хасалтыг буцаах',
       className: 'r-confirm',
-      body: [h('p', { class: 'r-confirm-line' }, `${map} · ${sideName(m, last.side)}`), h('p', { class: 'center' }, 'Сүүлийн хасалтыг буцаах уу?'), vsLine(m)],
+      body: [h('p', { class: 'r-confirm-line' }, `${map} · ${sideName(m, last.side)}`), h('p', { class: 'center' }, wasPick ? 'Сүүлийн сонголтыг буцаах уу?' : 'Сүүлийн хасалтыг буцаах уу?'), vsLine(m)],
       actions: [
         h('button', {
           type: 'button', class: 'btn gold block r-big', 'data-autofocus': '',
@@ -1151,7 +1684,7 @@ function createRefPage(root, params) {
       title: 'Шинээр эхлүүлэх',
       className: 'r-confirm',
       body: [
-        h('p', { class: 'r-confirm-sub' }, 'Бүх хасалт устана.'),
+        h('p', { class: 'r-confirm-sub' }, isBo3(m) ? 'Бүх хасалт, сонголт устана.' : 'Бүх хасалт устана.'),
         KO.has(m.stage) ? h('p', { class: 'center' }, 'Зоосны шийдвэр мөн устана.') : null,
         vsLine(m),
       ],
@@ -1194,9 +1727,10 @@ function createRefPage(root, params) {
         S.ref.matches = mergeVeto(S.ref.matches, no, fields);
         writeCache();
       } else reload();
-      if (action === 'ban' && fields.map) {   // сүүлийн хасалт: дүнг бүтнээр нь харуулна (тоглолт эхлэх хүртэл / «Хураах» хүртэл)
-        const cur = effective().find((x) => x.no === no);
-        S.vetoView = { no, status: cur ? cur.status : null, open: true };
+      const cur = effective().find((x) => x.no === no);
+      if ((action === 'ban' || action === 'pick') && cur && vetoState(cur, mapPool(store.get())).done) {
+        // сүүлийн алхам: дүнг бүтнээр нь харуулна (тоглолт эхлэх хүртэл / «Хураах» хүртэл); Bo3 — тал сонгох + JSON
+        S.vetoView = { no, status: cur.status, open: true };
       }
       renderAll();
       refreshVeto();

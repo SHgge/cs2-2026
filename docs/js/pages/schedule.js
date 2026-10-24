@@ -4,14 +4,14 @@ import { h, clear, fmtTime, fmtDate, loading, groupChip } from '../ui.js';
 import { store } from '../store.js';
 import { PLACES } from '../config.js';
 import { MATCHES, DAY_INFO, GROUP_LABEL, STATION_LABEL, TEAMS } from '../event.js';
-import { resolveMatches, fmtScore, mapPool, mapInfo, vetoState } from '../logic.js';
+import { resolveMatches, fmtScore, mapPool, mapInfo, vetoState, bestOf, seriesState } from '../logic.js';
 
 const MIN = 60 * 1000;
 const HOUR = 60 * MIN;
 
 export const DAYS = [
   { key: '2026-10-24', title: '1-р өдөр', info: 'd1', sub: 'Хэсгийн шат · MR12, нэмэлт цаггүй · 12:12 бол тэнцээ' },
-  { key: '2026-10-25', title: '2-р өдөр', info: 'd2', sub: 'Хасагдах шат · MR12, тэнцвэл нэмэлт цаг (MR3)' },
+  { key: '2026-10-25', title: '2-р өдөр', info: 'd2', sub: 'Хасагдах шат · MR12, тэнцвэл нэмэлт цаг (MR3) · Финал, 3-р байр Bo3' },
 ];
 export const STAGE_LABEL = { group: 'Хэсгийн шат', qf: 'Шөвгийн 8', sf: 'Шөвгийн 4', final: 'Финал', third: '3-р байр' };
 const DONE = new Set(['reported', 'final']);
@@ -81,8 +81,11 @@ export function sideInfo(state, m, side, { long = false } = {}) {
 }
 
 const BASE_KEYS = ['stage', 'code', 'grp', 'station', 'start', 'end'];
-/** Газрын зургийн хасалтын талбарууд (13-р migration). Хуучин төлөвт байхгүй → тоглолтод ч нэмэхгүй. */
-const VETO_KEYS = ['veto_first', 'veto_coin', 'veto', 'map'];
+/**
+ * Газрын зургийн хасалтын талбарууд (13-р migration) ба Bo3 (14-р: best_of, maps = [1, 2, шийдвэрлэх], games = газар бүрийн оноо).
+ * Хуучин төлөвт байхгүй → тоглолтод ч нэмэхгүй.
+ */
+const VETO_KEYS = ['veto_first', 'veto_coin', 'veto', 'map', 'best_of', 'maps', 'games'];
 /** event.MATCHES + төлөвийн оноо/төлөв/хасалт + logic.resolveMatches-ийн багууд. Хугацаагаар эрэмбэлсэн. */
 export function mergedMatches(state) {
   const view = publicView(state);
@@ -241,23 +244,111 @@ export function vetoInfo(state, m) {
   return safe(() => {
     const pool = mapPool(state);
     const v = vetoState(m, pool);
+    if (v.bo === 3) {
+      // Bo3: map = null; maps = [1-р газар (эхний багийн сонголт), 2-р газар, шийдвэрлэх] — серверийн m.maps давуу
+      const own = Array.isArray(m.maps) ? m.maps.filter((k) => pool.includes(k)) : [];
+      const derived = Array.isArray(v.maps) ? v.maps : [];
+      const maps = own.length >= derived.length ? own : derived;
+      return { ...v, pool, map: null, maps, done: v.done || maps.length === 3 };
+    }
     const map = v.map || (pool.includes(m.map) ? m.map : null);
-    return { ...v, pool, map, done: v.done || !!map };
+    return { ...v, pool, map, maps: map ? [map] : [], done: v.done || !!map };
   }, null);
 }
 export const mapName = (key) => mapInfo(key).name;
+
+/** Bo3 тоглолт уу (финал 19, 3-р байр 20; 14-р migration-ийн best_of). Хуучин төлөв / өгөгдөлгүй → false. */
+export const isBo3 = (m) => !!m && safe(() => bestOf(m) === 3, false);
+
+/**
+ * Bo3 цуврал (logic.seriesState): газрын зураг бүрийн мөр rows [{n, key, name, a, b, winner, ot}] + wonA, wonB, decided,
+ * played (оноо орсон газрын тоо), current (тоглож буй/дараагийн газрын индекс, шийдэгдвэл null), currentMap.
+ * Шийдэгдсэн цувралд тоглоогүй 3-р газар орохгүй (2:0); шийдвэрлэх газрын оноо нийтэд 120 с хүлээгдэж байвал газар нь «–»-тэй.
+ * Газрын зураг ч, оноо ч алга, эсвэл техникийн ялалт бол rows = []. Bo1 → null.
+ */
+export function seriesInfo(state, m) {
+  if (!isBo3(m)) return null;
+  return safe(() => {
+    const v = vetoInfo(state, m);
+    const s = seriesState(m, mapPool(state));
+    const games = Array.isArray(s.games) ? s.games : [];
+    const maps = v && v.maps && v.maps.length ? v.maps : (Array.isArray(s.maps) ? s.maps : []);
+    const rows = [];
+    const forfeit = m.forfeit === 'a' || m.forfeit === 'b';
+    if (!forfeit && (maps.length || games.length)) {
+      const total = s.decided ? Math.min(3, (s.wonA || 0) + (s.wonB || 0)) : 3;   // 2:0 → 2 газар, 2:1 → 3
+      for (let i = 0; i < total; i++) {
+        const g = games[i] || null;
+        const key = (g && g.map) || maps[i] || null;
+        rows.push({
+          n: i + 1, key, name: key ? mapName(key) : `${i + 1}-р газар`,
+          a: g ? g.a : null, b: g ? g.b : null, winner: g ? g.winner : null, ot: !!(g && g.ot),
+        });
+      }
+    }
+    const current = s.decided ? null : (Number.isInteger(s.current) ? s.current : games.length);
+    return {
+      rows, wonA: s.wonA || 0, wonB: s.wonB || 0, decided: !!s.decided, winner: s.winner || null, played: games.length,
+      current, currentMap: current == null ? null : ((rows[current] && rows[current].key) || s.currentMap || null),
+    };
+  }, null);
+}
+/** «Inferno 13:9 · Nuke 9:13 · Mirage –» — Bo3-ийн газар бүрийн оноо; харуулах зүйлгүй бол ''. */
+export function seriesText(si, sep = ' · ') {
+  if (!si || !si.rows.length) return '';
+  return si.rows.map((r) => `${r.name} ${r.a != null && r.b != null ? `${r.a}:${r.b}` : '–'}`).join(sep);
+}
+/** Явагдаж буй Bo3-ийн одоогийн оноо («1 : 0», газрын тоогоор) — газар дуусаагүй / Bo1 бол ''. */
+export function liveSeriesScore(m, si) {
+  return si && !isDone(m) && si.played > 0 ? `${si.wonA} : ${si.wonB}` : '';
+}
 
 // ---------- тоглолтын карт (schedule, groups, home) ----------
 export function stageTag(m) {
   if (m.stage === 'group' && m.grp) return groupChip(m.grp);
   const label = (m.stage === 'qf' || m.stage === 'sf') ? `${STAGE_LABEL[m.stage]} · ${m.code || ''}` : (STAGE_LABEL[m.stage] || m.code || '');
-  return h('span', { class: `chip pub-ko${m.stage === 'final' ? ' gold' : ''}` }, label);
+  return h('span', { class: `chip pub-ko${m.stage === 'final' ? ' gold' : ''}` }, isBo3(m) ? `${label} · Bo3` : label);
 }
 
-/** Хасалт эхэлсний дараа: хассан газрын зургууд (зурсан, жижиг), шийдэгдвэл «Газрын зураг: Mirage». */
-function vetoLine(state, m) {
+/**
+ * Bo3: хасалт/сонголтын явцад алхмууд (хассан нь зурсан, сонгосон нь «1. Inferno»); дууссаны дараа газар бүр оноотой
+ * («Bo3 · Inferno 13:9 · Nuke 9:13 · Mirage –», тоглож буй газар тодорсон) ба хассан 4 газрын зураг.
+ */
+function bo3Line(state, m, v, now) {
+  const who = (side) => sideInfo(state, m, side).text;
+  const acts = Array.isArray(v.acts) ? v.acts : [];
+  const isPick = (i) => acts[i] === 'pick';
+  if (!v.done) {
+    let n = 0;
+    return h('div', { class: 'pm-veto' },
+      h('span', { class: 'pm-vstep' }, `Газрын зургийн хасалт, сонголт ${v.steps.length}/${v.total}:`),
+      v.steps.length
+        ? h('span', { class: 'pm-bans' }, v.steps.map((x, i) => (isPick(i)
+          ? h('b', { class: 'pm-pick', title: `${who(x.side)} сонгосон` }, `${++n}. ${mapName(x.map)}`)
+          : h('s', { title: `${who(x.side)} хассан` }, mapName(x.map)))))
+        : null);
+  }
+  const si = seriesInfo(state, m);
+  const picks = v.steps.filter((x, i) => isPick(i));
+  const cur = si && !si.decided && isNow(m, now) ? si.current : null;
+  const bans = v.steps.filter((x, i) => !isPick(i));
+  return h('div', { class: 'pm-veto' },
+    h('span', { class: 'pm-map' }, 'Bo3'),
+    h('span', { class: 'pm-maps' }, (si ? si.rows : []).map((r, i) => h('span', {
+      class: `pm-g${i === cur ? ' cur' : ''}${r.winner ? ` w${r.winner}` : ''}`,
+      title: picks[i] ? `${r.n}-р газар: ${who(picks[i].side)} сонгосон` : `${r.n}-р газар: шийдвэрлэх`,
+    }, h('b', {}, r.name), r.a != null && r.b != null ? ` ${r.a}:${r.b}` : ' –'))),
+    bans.length
+      ? h('span', { class: 'pm-bans' }, h('span', { class: 'visually-hidden' }, 'Хассан:'),
+        bans.map((x) => h('s', { title: `${who(x.side)} хассан` }, mapName(x.map))))
+      : null);
+}
+
+/** Хасалт эхэлсний дараа: хассан газрын зургууд (зурсан, жижиг), шийдэгдвэл «Газрын зураг: Mirage». Bo3 → bo3Line. */
+function vetoLine(state, m, now) {
   const v = vetoInfo(state, m);
-  if (!v || (!v.started && !v.map)) return null;
+  if (!v || (!v.started && !v.map && !v.maps.length)) return null;
+  if (v.bo === 3) return bo3Line(state, m, v, now);
   const who = (side) => sideInfo(state, m, side).text;
   return h('div', { class: 'pm-veto' },
     v.map
@@ -278,7 +369,8 @@ export function matchCard(state, m, now, { station = true, time = false, stage =
   const live = isNow(m, now);
   const win = done ? winnerSide(m) : null;
   const st = statusOf(m);
-  const score = done ? scoreText(m) : '';
+  const si = seriesInfo(state, m);
+  const score = done ? scoreText(m) : liveSeriesScore(m, si);   // Bo3: явагдаж буй цувралын оноо («1 : 0»)
   const A = sideInfo(state, m, 'a');
   const B = sideInfo(state, m, 'b');
   const mark = (side) => (win === side ? ' win' : win ? ' lost' : '');
@@ -290,9 +382,10 @@ export function matchCard(state, m, now, { station = true, time = false, stage =
       live ? h('span', { class: 'chip pub-now' }, 'ОДОО') : (st.text ? h('span', { class: `pm-status s-${st.key}` }, st.text) : null)),
     h('div', { class: 'pm-body' },
       teamSpan(A, mark('a')),
-      score ? h('span', { class: 'pm-score' }, score) : h('span', { class: 'pm-vs', 'aria-label': 'эсрэг' }, '–'),
+      score ? h('span', { class: `pm-score${done ? '' : ' live'}`, title: done ? null : 'Газрын зургийн тоогоор' }, score)
+        : h('span', { class: 'pm-vs', 'aria-label': 'эсрэг' }, '–'),
       teamSpan(B, `${mark('b')} r`)),
-    veto ? vetoLine(state, m) : null);
+    veto ? vetoLine(state, m, now) : null);
 }
 
 // ---------- «Хуваарь» хуудас ----------
@@ -362,7 +455,8 @@ function legend(day) {
       ? [h('p', {}, 'А1 = А хэсгийн 1-р суудал (1-р сагсны баг). Эхэнд бичигдсэн баг газрын зургийг эхэлж хасна.'),
         h('p', {}, 'Хожил 3, тэнцээ 1, хожигдол 0 оноо. Хэсгийн 1, 2-р байр шөвгийн 8-д шалгарна.')]
       : [h('p', {}, 'А№1 = А хэсгийн 1-р байр. Нэг хэсгийн 2 баг дахин таарвал зөвхөн финал эсвэл 3-р байрын тоглолтод таарна.'),
-        h('p', {}, '16:15 — хаалт: шагнал гардуулах, шилжин явах цом, MVP зарлах.')],
+        h('p', {}, 'Финал, 3-р байрын тоглолт Bo3: 2 газрын зураг түрүүлж хожсон баг ялна. Газрын зураг бүрийн дараа 15 минут амарна.'),
+        h('p', {}, '17:30 — хаалт: шагнал гардуулах, шилжин явах цом, MVP зарлах.')],
     h('p', {}, `Багууд ангидаа хүлээнэ. Тоглолтоос 15 минутын өмнө менежер багаа ${PLACES.lab}-ын үүдэнд авчирна. `
       + '10 минутаас илүү хоцорвол 13:0 техникийн ялагдал.'));
 }

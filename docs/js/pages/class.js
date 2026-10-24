@@ -671,7 +671,7 @@ function createClassPage(root, params) {
     let retry = true;
     if (code === 'network') { title = 'Холболт амжилтгүй'; text = 'Интернэтээ шалгаад дахин оролдоорой.'; }
     if (code === 'bad_token') { title = 'Холбоос хүчингүй байна'; text = 'Анги удирдсан багшаасаа шинэ QR код аваарай.'; retry = false; }
-    if (code === 'expired') { title = 'Холбоосын хугацаа дууссан'; text = 'Энэ холбоос 10.25-ны 18:00 хүртэл хүчинтэй байсан.'; retry = false; }
+    if (code === 'expired') { title = 'Холбоосын хугацаа дууссан'; text = 'Энэ холбоос 10.25-ны 20:00 хүртэл хүчинтэй байсан.'; retry = false; }
     root.appendChild(h('section', { class: 'card error k-fatal', role: 'alert' },
       h('h1', {}, title), h('p', {}, text),
       code === 'bad_token' ? h('p', { class: 'small' }, 'Багш нарын баг: зохион байгуулагчаас шинэ QR код авна уу.') : null,
@@ -1475,7 +1475,11 @@ function createClassPage(root, params) {
       const res = mine > theirs ? ['ok', 'Ялалт'] : mine < theirs ? ['err', 'Ялагдал'] : ['', 'Тэнцээ'];
       let score = '';
       try { score = logic.fmtScore(mt); } catch (e) { score = `${mt.score_a} : ${mt.score_b}`; }
-      result = h('span', { class: 'k-mres' }, h('b', {}, score), h('span', { class: `chip ${res[0]}` }, res[1]), mt.status === 'reported' ? h('span', { class: 'small muted' }, ' шалгагдаж байна') : null);
+      let maps = '';   // Bo3 (финал, 3-р байр): газар бүрийн оноо «13:10 · 8:13 · 13:11»
+      try { maps = logic.fmtSeries ? logic.fmtSeries(mt) : ''; } catch (e) { maps = ''; }
+      result = h('span', { class: 'k-mres' }, h('b', {}, score), h('span', { class: `chip ${res[0]}` }, res[1]),
+        maps ? h('span', { class: 'small muted' }, ` Bo3: ${maps}`) : null,
+        mt.status === 'reported' ? h('span', { class: 'small muted' }, ' шалгагдаж байна') : null);
     } else if (mt.status === 'live') result = h('span', { class: 'chip warn' }, 'Явагдаж байна');
     return h('li', { class: `k-m${mt.status === 'live' ? ' live' : ''}` },
       h('div', { class: 'k-mtime' }, h('b', {}, fmtTime(mt.start)), h('span', { class: 'small muted' }, fmtDate(mt.start))),

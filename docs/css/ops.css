@@ -410,6 +410,58 @@ body[data-page="ref"] { padding-bottom: env(safe-area-inset-bottom); }
 .r-veto-caret { display: inline-block; margin-left: 6px; text-decoration: none; }   /* inline-block: not underlined */
 .r-veto-less { display: block; margin: 6px auto 0; }
 .r-veto-knife { margin: 10px 0 0; padding: 8px 10px; border-radius: 10px; background: var(--warn-l); color: #7C2D12; font-weight: 700; }
+/* Bo3 (final, 3rd place): pick tiles gold, the decider green; the pick step selects in gold (ban steps stay red) */
+.r-veto-turn.pick b { color: var(--gold-ink); }
+.r-veto-tile.sel.sel-pick { background: var(--gold-ink); border-color: var(--gold-ink); box-shadow: 0 0 0 3px var(--gold-l); }
+.r-veto-tile.pick { background: var(--gold-l); border-color: var(--gold-ink); color: var(--ink); }
+.r-veto-tile.pick small { color: var(--gold-ink); }
+.r-veto-tile.decider { background: var(--ok); border-color: var(--ok); color: #fff; box-shadow: 0 0 0 3px var(--ok-l); }
+.r-veto-play-list { margin: 4px auto 8px; padding: 0; list-style: none; counter-reset: g; display: grid; gap: 6px; max-width: 360px; }
+.r-veto-play-list li {
+  counter-increment: g; display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 8px; padding: 6px 10px; border-radius: 10px; background: #fff;
+  border: 1px solid var(--ok-l); text-align: left;
+}
+.r-veto-play-list li::before { content: counter(g) '.'; font-weight: 800; color: var(--ok); }
+.r-veto-play-list b { font-size: 1.3rem; font-weight: 900; letter-spacing: .04em; color: var(--ink); }   /* whole word; the label wraps below */
+.r-veto-play-list small { margin-left: auto; font-weight: 700; color: var(--muted); }
+/* side choice for the MatchZy JSON (map 1: the other team, map 2: the first team; decider: knife) */
+.r-side-pick { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin: 6px 0 0; text-align: left; font-weight: 600; }
+.r-side-pick-l { flex: 1 1 180px; min-width: 0; overflow-wrap: anywhere; }
+.r-side-btns { display: inline-flex; gap: 6px; }
+.r-side-btn {
+  min-width: 64px; min-height: 48px; padding: 0 12px; border: 2px solid var(--navy); border-radius: 10px; background: #fff; color: var(--navy);
+  font: inherit; font-weight: 800; letter-spacing: .04em; cursor: pointer; touch-action: manipulation;
+}
+.r-side-btn.ct.on { background: #1D4ED8; border-color: #1D4ED8; color: #fff; }
+.r-side-btn.t.on { background: #B45309; border-color: #B45309; color: #fff; }
+.r-side-knife, .r-side-now { padding: 6px 10px; border-radius: 10px; background: var(--warn-l); color: #7C2D12; }
+.r-side-wait { margin: 6px 0 0; color: var(--warn); font-weight: 700; text-align: left; }
+.r-veto-code.r-json { display: block; white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.5; font-size: .92rem; }   /* whole lines visible; «Хуулах» copies them exactly */
+/* Bo3 series on the score card: header (maps won + map scores), game tabs, the selected game's score */
+.r-series { margin: 12px 0 8px; padding: 10px 12px; border: 2px solid var(--gold-ink); border-radius: 14px; background: #FFFBEB; }
+.r-series-top { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; }
+.r-series-teams { flex: 1 1 100%; display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 8px; font-weight: 800; text-align: center; overflow-wrap: anywhere; }
+.r-series-score { font-size: 1.8rem; font-variant-numeric: tabular-nums; color: var(--ink); }
+.r-series-maps { margin: 8px 0 0; padding: 0; list-style: none; display: grid; gap: 4px; counter-reset: g; }
+.r-series-maps li { counter-increment: g; display: flex; align-items: baseline; gap: 8px; font-variant-numeric: tabular-nums; }
+.r-series-maps li::before { content: counter(g) '.'; font-weight: 800; color: var(--gold-ink); }
+.r-sm-map { flex: 1; min-width: 0; font-weight: 700; overflow-wrap: anywhere; }
+.r-series-maps li.todo .r-sm-sc { color: var(--muted); font-weight: 600; }
+.r-series-rule { margin: 6px 0 0; }
+.r-games { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 6px; margin: 4px 0 10px; }
+.r-game-tab {
+  display: flex; flex-direction: column; align-items: center; gap: 1px; min-width: 0; min-height: 56px; padding: 6px 4px; border: 2px solid var(--navy);
+  border-radius: 12px; background: #fff; color: var(--navy); font: inherit; line-height: 1.15; cursor: pointer; touch-action: manipulation;
+}
+.r-game-tab small { max-width: 100%; font-size: .78rem; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.r-game-tab.played { border-style: solid; background: #F1F5F9; }
+.r-game-tab.on { background: var(--navy); color: #fff; box-shadow: 0 0 0 3px #CBD5E1; }
+.r-game-tab:disabled { opacity: .5; cursor: default; }
+.r-game-sc { font-variant-numeric: tabular-nums; }
+.r-game-h { margin: 4px 0 6px; font-size: 1.05rem; overflow-wrap: anywhere; }
+.btn.r-drop { border-color: var(--err); color: var(--err); }
+.r-confirm .r-confirm-game { margin: 0; font-weight: 700; color: var(--navy-2); }
+
 .r-confirm .r-confirm-line { font-size: 1.45rem; font-weight: 800; text-align: center; margin: 10px 0; font-variant-numeric: tabular-nums; }
 .r-confirm .r-confirm-sub { text-align: center; color: var(--err); font-weight: 700; }
 
