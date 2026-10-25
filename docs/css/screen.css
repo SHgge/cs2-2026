@@ -753,7 +753,123 @@ html.scr-on body { background: #000; }
   color: var(--ok); font: 600 28px/1.2 Consolas, 'Courier New', monospace; white-space: nowrap; border: 2px solid var(--ok);
 }
 
+/* ---------- аваргын тайзны арын дэлгэц (?scene=champion, screen.js championScene) ----------
+   Баг LED-ийн өмнө зогсоно: нэр, оноо тайзны дээд 2/3-д, цом хоёр хажууд, доор зөвхөн чимэглэл.
+   Дэвсгэр, туяа, конфетти — бүтэн дэлгэцээр (vw/vh); бичиг — 1920×1080 тайзан дээр (scale). */
+.scn {
+  --amber: #F5A524; --amber2: #FFC75A; --gold3: #FFE6A3; --ct: #5AA9F0; --text: #EEF2F6; --muted: #A9B6C6; --logo: #0D0447;
+  position: fixed; inset: 0; z-index: 100; overflow: hidden; background: #03040A; color: var(--text);
+  font-family: 'Oswald', 'Bahnschrift', 'Segoe UI', sans-serif; font-weight: 400; line-height: 1.1;
+  -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; cursor: default; user-select: none;
+}
+.scn *, .scn *::before, .scn *::after { box-sizing: border-box; }
+.scn b { font-weight: 700; }
+.scn em, .scn i { font-style: normal; }
+.scn img { max-width: none; }
+.scn-bg {
+  position: absolute; inset: 0; pointer-events: none;
+  background:
+    radial-gradient(58vw 44vh at 50% 32%, rgba(245, 165, 36, .30), transparent 70%),
+    radial-gradient(46vw 52vh at 50% 112%, rgba(90, 169, 240, .22), transparent 72%),
+    linear-gradient(rgba(152, 166, 184, .05) 2px, transparent 2px) 0 0 / 56px 56px,
+    linear-gradient(90deg, rgba(152, 166, 184, .05) 2px, transparent 2px) 0 0 / 56px 56px,
+    radial-gradient(130vw 100vh at 50% 30%, #100C44 0%, #08072A 45%, #020208 100%);
+}
+.scn-rays {
+  position: absolute; left: 50%; top: 31%; width: 150vmax; height: 150vmax; margin: -75vmax 0 0 -75vmax; pointer-events: none;
+  opacity: .32; transition: opacity .8s;
+  background: repeating-conic-gradient(from 0deg, rgba(245, 165, 36, .26) 0deg 5deg, transparent 5deg 15deg);
+  -webkit-mask-image: radial-gradient(circle, #000 4%, transparent 44%); mask-image: radial-gradient(circle, #000 4%, transparent 44%);
+  animation: scr-spin 120s linear infinite; will-change: transform;
+}
+.scn.is-revealed .scn-rays { opacity: .9; }
+.scn-flash {
+  position: absolute; inset: 0; pointer-events: none; opacity: 0;
+  background: radial-gradient(60vw 60vh at 50% 32%, rgba(255, 246, 221, .95), rgba(255, 246, 221, 0) 70%);
+}
+.scn.is-revealed .scn-flash { animation: scn-flash 1.3s ease-out both; }
+
+.scn-stage { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; transform-origin: 0 0; }
+.scn-top { position: absolute; left: 64px; right: 64px; top: 22px; height: 84px; display: flex; align-items: center; gap: 22px; }
+.scn-badge {
+  width: 72px; height: 72px; flex: none; overflow: hidden; border-radius: 14px; background: var(--logo);
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, .16), 0 10px 26px rgba(0, 0, 0, .55);
+}
+.scn-logo { display: block; width: 72px; height: 72px; }
+.scn-title { font-size: 42px; font-weight: 700; letter-spacing: .02em; text-transform: uppercase; white-space: nowrap; }
+.scn-title span { color: var(--muted); font-weight: 400; }
+.scn-title em { color: var(--amber); }
+.scn-school { margin-left: auto; font-size: 32px; letter-spacing: .06em; color: var(--muted); white-space: nowrap; }
+
+/* Нэр, оноо, газрууд тайзны ≈58%-иас дээш (зогсож буй хүмүүсийн толгойноос дээгүүр). */
+.scn-main { position: absolute; left: 330px; right: 330px; top: 116px; display: flex; flex-direction: column; align-items: center; text-align: center; }
+.scn-kick {
+  position: relative; padding: 4px 34px; font-size: 54px; font-weight: 700; letter-spacing: .2em; text-transform: uppercase;
+  color: var(--amber2); white-space: nowrap; text-shadow: 0 0 30px rgba(245, 165, 36, .45);
+}
+.scn-kick::before, .scn-kick::after {
+  content: ''; position: absolute; top: 50%; width: 150px; height: 4px; margin-top: -2px;
+  background: linear-gradient(90deg, transparent, var(--amber));
+}
+.scn-kick::before { right: 100%; }
+.scn-kick::after { left: 100%; transform: scaleX(-1); }
+.scn-name {
+  margin-top: 2px; font-size: 330px; font-weight: 700; line-height: .86; white-space: nowrap;
+  background: linear-gradient(180deg, #FFF8E4 0%, #FFD772 36%, #F5A524 62%, #B06A0C 100%);
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+  filter: drop-shadow(0 0 46px rgba(245, 165, 36, .6)) drop-shadow(0 12px 30px rgba(0, 0, 0, .65));
+}
+.scn-name.ph {
+  margin-bottom: 22px;   /* «?»-ийн цэг (амьсгалах scale-тай) доорх мөрөнд хүрэхгүй */
+  background: none; color: #EEF2F6; -webkit-text-stroke: 4px rgba(245, 165, 36, .55);
+  filter: drop-shadow(0 0 40px rgba(90, 169, 240, .55)) drop-shadow(0 12px 30px rgba(0, 0, 0, .65));
+  animation: scn-breathe 1.8s ease-in-out infinite;
+}
+.scn.is-revealed .scn-name:not(.ph) { animation: scn-pop 1s cubic-bezier(.2, 1.35, .4, 1) both; }
+.scn-sub { margin-top: 0; min-height: 88px; display: flex; align-items: center; justify-content: center; gap: 28px; white-space: nowrap; }
+.scn-sub span { font-size: 56px; letter-spacing: .06em; color: #D5DEE8; text-shadow: 0 2px 12px rgba(0, 0, 0, .8); }   /* «Bo3» том үсгээр «ВОЗ» шиг уншигдана */
+.scn-sub b { font-size: 84px; line-height: 1; color: var(--text); }
+.scn.is-revealed .scn-sub b { color: var(--amber2); text-shadow: 0 0 30px rgba(245, 165, 36, .5); }
+.scn-maps { margin-top: 8px; display: flex; flex-wrap: wrap; justify-content: center; gap: 18px; }
+.scn-map {
+  display: flex; align-items: baseline; gap: 16px; padding: 6px 26px; font-size: 44px; line-height: 1.1; border-radius: 8px;
+  background: rgba(7, 9, 13, .8); border: 2px solid rgba(152, 166, 184, .45); color: var(--muted);
+}
+.scn-map.win { border-color: rgba(245, 165, 36, .85); color: var(--text); }
+.scn-map.win b { color: var(--amber2); }
+.scn.is-revealed .scn-map { animation: scn-rise .6s ease-out both; }
+.scn.is-revealed .scn-map:nth-child(2) { animation-delay: .12s; }
+.scn.is-revealed .scn-map:nth-child(3) { animation-delay: .24s; }
+
+.scn-cup { position: absolute; top: 240px; width: 380px; height: 460px; display: grid; place-items: center; }
+.scn-cup.l { left: 30px; }
+.scn-cup.r { right: 30px; }
+.scn-cup .hero-rays { width: 520px; height: 520px; opacity: .5; }
+.scn-cup .scr-trophy { width: 280px; }
+.scn:not(.scn-still) .scn-cup .hero-rays { animation: scr-spin 60s linear infinite; }
+.scn-foot {
+  position: absolute; left: 0; right: 0; bottom: 26px; display: flex; justify-content: center; align-items: center; gap: 16px;
+  font-size: 28px; color: var(--muted); white-space: nowrap;
+}
+.scn-foot b { color: var(--text); font-weight: 600; }
+
+.scn-confetti { position: absolute; inset: 0; z-index: 1; pointer-events: none; display: none; }   /* бичгийн ард: зураг дээр нэр тод */
+.scn-stage { z-index: 2; }
+.scn-flash { z-index: 3; }
+.scn.is-revealed .scn-confetti { display: block; }
+.scn-confetti i {
+  position: absolute; left: var(--x); top: 0; width: var(--s); height: calc(var(--s) * .45); border-radius: 2px; background: var(--c);
+  transform: translate3d(0, -10vh, 0); animation: scn-fall var(--d) linear var(--dl) infinite; will-change: transform;
+}
+.scn-still .scn-confetti i { animation: none; transform: translate3d(0, var(--y), 0) rotate(var(--r)); }
+.scn-still *, .scn-still *::before, .scn-still *::after { animation: none !important; transition: none !important; }
+
 /* ---------- хөдөлгөөн ---------- */
+@keyframes scn-fall { from { transform: translate3d(0, -10vh, 0) rotate(0deg); } to { transform: translate3d(var(--sw), 108vh, 0) rotate(var(--r)); } }
+@keyframes scn-pop { from { opacity: 0; transform: scale(.5); } 55% { opacity: 1; } to { opacity: 1; transform: none; } }
+@keyframes scn-flash { 0% { opacity: 0; } 14% { opacity: .95; } 100% { opacity: 0; } }
+@keyframes scn-breathe { 50% { opacity: .85; transform: scale(1.04); } }
+@keyframes scn-rise { from { opacity: 0; transform: translateY(24px); } to { opacity: 1; transform: none; } }
 @keyframes scr-spin { to { transform: rotate(360deg); } }
 @keyframes scr-timer { from { transform: scaleX(0); } to { transform: scaleX(1); } }
 @keyframes scr-in { from { opacity: 0; transform: translateX(46px); } to { opacity: 1; transform: none; } }

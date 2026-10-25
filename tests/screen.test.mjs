@@ -995,3 +995,42 @@ describe('text guard: preparation slides (groups, day-1 timetable, 10 rules, man
     }
   });
 });
+
+// ================================================================ champion scene (awards ceremony LED backdrop)
+describe('text guard: champion scene (#/screen?scene=champion)', () => {
+  const there = existsSync(join(DOCS, SCREEN_JS));
+  const skip = there ? false : `${SCREEN_JS} is not written yet`;
+  /** Source of the module-level championScene() (ends at the first closing brace in column 0). */
+  const sceneSrc = (text) => {
+    const i = text.indexOf('function championScene(');
+    const j = text.indexOf('\n}\n', i);
+    return i >= 0 && j > i ? text.slice(i, j) : '';
+  };
+
+  test('render() branches to championScene for ?scene=champion only; reveal / team options parsed', { skip }, () => {
+    const text = scanText(SCREEN_JS);
+    assert.match(text, /scene: q\.scene === 'champion' \? 'champion' : null/);
+    assert.match(text, /if \(opt\.scene === 'champion'\) return championScene\(/);
+    for (const k of ['reveal: on(q.reveal)', 'team: typeof q.team']) assert.ok(text.includes(k), k);
+  });
+
+  test('scene: reveal keys, finalists, cleanup; class champion with an unofficial fallback; never reloads itself', { skip }, () => {
+    const text = scanText(SCREEN_JS);
+    const src = sceneSrc(text);
+    assert.ok(src, 'championScene() found');
+    for (const k of ["e.key === ' '", "e.key === 'Enter'", "e.key === 'Escape'", "e.key === '0'", "e.key === '1'", 'm.no === 19',
+      "removeEventListener('keydown'", "removeEventListener('resize'", 'unsub()', 'cleanup()']) assert.ok(src.includes(k), k);
+    assert.doesNotMatch(src, /location\.reload|checkBuild|(?<!store\.)setInterval\(/, 'the scene must not reload itself mid-ceremony');
+    assert.match(text, /finalRanking\(publicView\(state\), \{ official: false \}\)/, 'unofficial fallback');
+    assert.match(text, /!x\.is_teachers/, '?team= accepts class teams only');
+  });
+
+  test('screen.css styles the scene; confetti stays behind the text', { skip }, () => {
+    const css = scanText('css/screen.css');
+    for (const cls of ['scn', 'scn-stage', 'scn-name', 'scn-sub', 'scn-maps', 'scn-cup', 'scn-confetti', 'scn-flash', 'scn-still']) {
+      assert.match(css, new RegExp(`\\.${cls}\\b`), `.${cls}`);
+    }
+    const z = (sel) => Number((new RegExp(`\\.${sel}\\s*\\{[^}]*z-index:\\s*(\\d+)`).exec(css) || [])[1]);
+    assert.ok(z('scn-confetti') < z('scn-stage'), 'confetti below the text');
+  });
+});

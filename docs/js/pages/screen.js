@@ -4,6 +4,7 @@
 // API өгөгдлийг зөвхөн textContent-ээр (ui.h) гаргана; innerHTML-ийг зөвхөн qr.js-ийн үүсгэсэн QR SVG ашиглана (CONTRACT §5).
 // URL: ?static=1 (export: хөдөлгөөнгүй, тоолуурын оронд огноо, race/live слайдгүй) · ?slide=<id> · ?t=<ISO> (дуурайсан цаг)
 //      ?rotate=<ms> (9000; 4000–30000) · ?safe=1 (ТВ-ийн ирмэгээс 3% зай) · ?debug=1 (хүрээ, үе шат, scale).
+//      ?scene=champion — шагнал гардуулах ёслолд аварга ангийн ард харуулах бүтэн дэлгэц (championScene; ?reveal=1, ?team=<код>).
 // Export-ийн дохио: html[data-screen-ready="1"], html[data-slides], html[data-phase], .scr-stage[data-slide].
 import { h, clear, fmtTime, fmtDate } from '../ui.js';
 import { store } from '../store.js';
@@ -15,7 +16,7 @@ import {
 import {
   SLIDE_IDS, SLIDE_LABEL, TIMES, settingsOf, drawShown, regSummary, screenPhase, wavesOf, slidesFor, countdownFor,
 } from '../phase.js';
-import { groupStandings } from '../logic.js';
+import { groupStandings, finalRanking } from '../logic.js';
 import {
   makeClock, mergedMatches, stationNowNext, sideInfo, isDone, isNow, winnerSide, scoreText, fallbackState,
   fmtDateShort, publicView, nameByCode, teamLabel, vetoInfo, mapName, isBo3, seriesInfo, seriesText, liveSeriesScore,
@@ -121,6 +122,9 @@ function readOptions(q) {
     rotate: q.rotate != null && Number.isFinite(r) && r > 0 ? Math.min(30000, Math.max(4000, Math.round(r))) : 9000,
     safe: on(q.safe),
     debug: on(q.debug),
+    scene: q.scene === 'champion' ? 'champion' : null,
+    reveal: on(q.reveal),
+    team: typeof q.team === 'string' ? q.team.trim().slice(0, 24) : '',
   };
 }
 
@@ -252,6 +256,233 @@ function stageText(m) {
   return m.code || '';
 }
 
+// ---------- аваргын тайзны арын дэлгэц (?scene=champion) ----------
+// Аварга анги LED-ийн өмнө зогсож зургаа авахуулна: доод хэсгийг хүмүүс халхална тул нэр, оноо дээд хэсэгт, цом хоёр
+// хажууд, доор зөвхөн чимэглэл. Дэвсгэр, туяа, конфетти дэлгэцийг бүтэн дүүргэнэ (LED 16:9 биш байж болно).
+// Удирдлага: Space / Enter — аваргыг нээнэ (аварга тодорхойгүй бол юу ч болохгүй); Esc — буцааж нууна; нээхээс өмнө 1 / 2 —
+// финалын эхний / хоёр дахь анги (дүн сайтад ороогүй үед гараар), 0 — сайтын дүн. Төлөв хаягт хадгалагдана (?reveal=1, ?team=<код>).
+// Шинэ хувилбар гарсан ч өөрөө дахин ачаалахгүй (ёслолын дундуур нээсэн төлөв алдагдана).
+const SCN_COLORS = ['#F5A524', '#FFC75A', '#FFE6A3', '#5AA9F0', '#EEF2F6'];
+const SCN_PIECES = 110;
+
+/** ?team= → ангийн багийн id (код «12a» эсвэл нэр «12а»); багш нарын баг аварга болохгүй (удирдамж 11.4). */
+function sceneTeam(state, key) {
+  const k = String(key || '').trim().toLocaleLowerCase('mn');
+  if (!k) return null;
+  const list = state && Array.isArray(state.teams) && state.teams.length ? state.teams : TEAMS;
+  const t = list.find((x) => x && !x.is_teachers
+    && (String(x.code || '').toLowerCase() === k || String(x.name || '').toLocaleLowerCase('mn') === k));
+  return t ? t.id : null;
+}
+
+/** Ангиудын 1-р байр: ерөнхий шүүгчийн баталсан дүн, байхгүй бол шүүгчийн оруулсан дүн (ёслол батлахаас түрүүлж болно). */
+function sceneChampion(state) {
+  const off = placesOf(state).places[0];
+  if (off != null) return off;
+  try {
+    const fr = finalRanking(publicView(state), { official: false });
+    return fr && Array.isArray(fr.classPlaces) && fr.classPlaces[0] != null ? fr.classPlaces[0] : null;
+  } catch { return null; }
+}
+
+function championScene(root, opt, cleanup) {
+  const docEl = document.documentElement;
+  const still = opt.isStatic || reducedMotion();
+  let state = null;
+  let disposed = false;
+  let revealed = opt.reveal;     // хөтлөгчийн хүсэл; дэлгэц аварга тодорхой болмогц л нээгдэнэ
+  let teamKey = opt.team;        // 1 / 2 / ?team= — гараар сонгосон ангийн код
+  let champName = null;
+  let finalists = [null, null];
+  let painted = '';
+  let wake = null;
+  let idleT = null;
+
+  const nameEl = h('div', { class: 'scn-name ph' }, '?');
+  const sub = h('div', { class: 'scn-sub' });
+  const maps = h('div', { class: 'scn-maps' });
+  const logo = h('img', { class: 'scn-logo', src: 'assets/img/logo-192.png', alt: '', width: '96', height: '96' });
+  const stage = h('div', { class: 'scn-stage' },
+    h('header', { class: 'scn-top' },
+      h('div', { class: 'scn-badge' }, logo),
+      h('div', { class: 'scn-title' }, 'Сургуулийн аварга', h('span', {}, ' – '), h('em', {}, 'CS2 2026')),
+      h('div', { class: 'scn-school' }, SCHOOL)),
+    h('div', { class: 'scn-cup l', 'aria-hidden': 'true' }, h('i', { class: 'hero-rays' }), bigTrophy()),
+    h('div', { class: 'scn-cup r', 'aria-hidden': 'true' }, h('i', { class: 'hero-rays' }), bigTrophy()),
+    h('main', { class: 'scn-main' }, h('div', { class: 'scn-kick' }, CHAMPION_TITLE), nameEl, sub, maps),
+    h('footer', { class: 'scn-foot' }, h('b', {}, '2026.10.25'), h('i', {}, '·'), h('span', {}, 'Шилжин явах «Сургуулийн аварга» цом'),
+      h('i', {}, '·'), h('span', {}, VALVE_LINE)));
+  const confetti = h('div', { class: 'scn-confetti', 'aria-hidden': 'true' });
+  for (let i = 0; i < SCN_PIECES; i++) {
+    const f = (i * 0.618034) % 1;   // алтан харьцаагаар жигд тараана: дахин ачаалахад ч ижил
+    const g = (i * 0.414214) % 1;
+    const d = (i * 0.754878) % 1;   // хоцролт байрлалаас хамааралгүй: бүх өргөнөөр зэрэг унана
+    vars(confetti.appendChild(h('i')), {
+      '--x': `${(f * 100).toFixed(2)}vw`, '--y': `${(g * 96).toFixed(2)}vh`, '--s': `${12 + Math.round(g * 14)}px`,
+      '--c': SCN_COLORS[i % SCN_COLORS.length], '--d': `${(6 + g * 6).toFixed(2)}s`, '--dl': `${(d * 2.5).toFixed(2)}s`,
+      '--sw': `${Math.round((g - 0.5) * 16)}vw`, '--r': `${Math.round(360 + f * 900)}deg`,
+    });
+  }
+  const view = h('div', { class: `scn${still ? ' scn-still' : ''}`, role: 'region', 'aria-label': 'Аваргын дэлгэц', translate: 'no' },
+    h('div', { class: 'scn-bg', 'aria-hidden': 'true' }), h('div', { class: 'scn-rays', 'aria-hidden': 'true' }), confetti,
+    h('div', { class: 'scn-flash', 'aria-hidden': 'true' }), stage);
+
+  clear(root);
+  root.appendChild(view);
+  document.body.classList.add('scr-mode');
+
+  function layout() {
+    const vw = window.innerWidth || STAGE_W;
+    const vh = window.innerHeight || STAGE_H;
+    const k = Math.min(vw / STAGE_W, vh / STAGE_H) * (opt.safe ? 0.94 : 1);
+    // Өндөр илүүтэй дэлгэцэд тайзыг дээш нь шахна: доод хэсгийг хүмүүс халхална.
+    const x = Math.round(((vw - STAGE_W * k) / 2) * 100) / 100;
+    const y = Math.round(Math.max(0, Math.min((vh - STAGE_H * k) / 2, vh * 0.03)) * 100) / 100;
+    stage.style.transform = `translate(${x}px, ${y}px) scale(${k})`;
+  }
+
+  /** Нэр талбайдаа багтахгүй бол үсгийг жижигрүүлнэ (фонт ачаалагдсаны дараа, хэмжээ өөрчлөгдөхөд дахин). */
+  function fitName() {
+    nameEl.style.fontSize = '';
+    const avail = nameEl.parentElement ? nameEl.parentElement.clientWidth : 0;
+    const need = nameEl.scrollWidth;
+    if (avail > 0 && need > avail) nameEl.style.fontSize = `${Math.floor(parseFloat(getComputedStyle(nameEl).fontSize) * (avail / need))}px`;
+  }
+
+  /** Хаягт хадгална (дахин ачаалахад нээсэн төлөв, гараар сонгосон анги үлдэнэ); replaceState нь hashchange үүсгэхгүй. */
+  function persist() {
+    try {
+      const q = new URLSearchParams({ scene: 'champion' });
+      if (revealed) q.set('reveal', '1');
+      if (teamKey) q.set('team', teamKey);
+      if (opt.safe) q.set('safe', '1');
+      history.replaceState(history.state, '', `${location.pathname}${location.search}#/screen?${q.toString()}`);
+    } catch { /* ignore */ }
+  }
+
+  function paint() {
+    if (disposed) return;
+    const st = state || fallbackState();
+    const fin = mergedMatches(st).find((m) => m.no === 19) || null;
+    const A = fin ? sideInfo(st, fin, 'a') : null;
+    const B = fin ? sideInfo(st, fin, 'b') : null;
+    finalists = [A && A.known ? A.id : null, B && B.known ? B.id : null];
+    const champ = sceneTeam(st, teamKey) ?? sceneChampion(st);
+    champName = champ != null ? classUp(teamLabel(st, champ)) : null;
+    const shown = revealed && !!champName;
+    const label = `Финал${fin && isBo3(fin) ? ' · Bo3' : ''}`;
+    let big = null;
+    const rows = [];
+    if (!shown) {
+      big = A && B && A.known && B.known ? `${classUp(A.text)} – ${classUp(B.text)}` : null;
+    } else {
+      // Оноо, газар бүрийн дүнг аварга ангийн талаас («2:1»); финалд хожоогүй бол (багш нар түрүүлсэн) оноогүй.
+      const side = fin ? (fin.team_a === champ ? 'a' : fin.team_b === champ ? 'b' : null) : null;
+      const si = fin ? seriesInfo(st, fin) : null;
+      const mine = (a, b) => (side === 'a' ? `${a}:${b}` : `${b}:${a}`);
+      if (side && si && si.decided && si.winner === side) {
+        big = mine(si.wonA, si.wonB);
+        for (const r of si.rows) if (r.a != null && r.b != null) rows.push([r.name, mine(r.a, r.b), r.winner === side]);
+      } else if (side && !si && isDone(fin) && winnerSide(fin) === side && fin.score_a != null && fin.score_b != null) {
+        big = mine(fin.score_a, fin.score_b);
+      }
+    }
+    view.classList.toggle('is-revealed', shown);
+    const key = JSON.stringify([shown, champName, label, big, rows]);
+    if (key === painted) return;      // өөрчлөлтгүй бол дахин зурахгүй (газрын хавтангийн хөдөлгөөн давтагдахгүй)
+    painted = key;
+    nameEl.textContent = shown ? champName : '?';
+    nameEl.classList.toggle('ph', !shown);
+    clear(sub);
+    clear(maps);
+    add(sub, h('span', {}, label), big ? h('b', {}, big) : null);
+    for (const [map, score, win] of rows) add(maps, h('div', { class: `scn-map${win ? ' win' : ''}` }, h('span', {}, map), h('b', {}, score)));
+    fitName();
+  }
+
+  function setReveal(on) {
+    if (on && !champName) return;     // аварга тодорхойгүй (дүн сайтад ороогүй): «?»-г баярлуулахгүй — эхлээд 1 / 2
+    if (revealed === on) return;
+    revealed = on;
+    persist();
+    paint();
+  }
+
+  /** Аваргыг гараар: финалын тал (1 / 2) эсвэл сайтын дүн (0). Зөвхөн нээхээс өмнө. */
+  function pick(id) {
+    const list = state && Array.isArray(state.teams) ? state.teams : TEAMS;
+    const t = id == null ? null : list.find((x) => x && x.id === id);
+    teamKey = t ? String(t.code || t.name || '') : '';
+    persist();
+    paint();
+  }
+
+  // Хулганы товшилтоор нээхгүй: цонхыг идэвхжүүлэх товшилт аваргыг эрт ил гаргана.
+  const onKey = (e) => {
+    if (e.ctrlKey || e.altKey || e.metaKey || e.repeat) return;
+    if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); setReveal(true); return; }
+    if (e.key === 'Escape') { setReveal(false); return; }
+    if (revealed) return;             // нээсний дараа аваргыг солихгүй: эхлээд Esc
+    if (e.key === '0') pick(null);
+    else if ((e.key === '1' || e.key === '2') && finalists[Number(e.key) - 1] != null) pick(finalists[Number(e.key) - 1]);
+  };
+  const lock = async () => {
+    try {
+      if (!('wakeLock' in navigator) || document.visibilityState !== 'visible') return;
+      const w = await navigator.wakeLock.request('screen');
+      if (disposed) w.release(); else wake = w;
+    } catch { wake = null; }
+  };
+  const onVis = () => { if (document.visibilityState === 'visible') lock(); };
+  const onMove = () => {
+    document.body.classList.remove('pub-idle');
+    clearTimeout(idleT);
+    idleT = setTimeout(() => document.body.classList.add('pub-idle'), 3000);
+  };
+  const onResize = () => { layout(); fitName(); };
+  document.addEventListener('keydown', onKey);
+  document.addEventListener('visibilitychange', onVis);
+  document.addEventListener('mousemove', onMove);
+  window.addEventListener('resize', onResize);
+
+  const unsub = store.subscribe((s, meta) => {
+    if (s) state = s;
+    else if (!state && meta && meta.error) state = fallbackState();
+    paint();
+  });
+  store.setInterval(10000);
+  lock();
+  onMove();
+  layout();
+  paint();
+  (async () => {
+    if (document.fonts && document.fonts.load) {
+      await withTimeout(Promise.all([document.fonts.load('700 100px Oswald', 'ӨҮ₮'), document.fonts.load('400 40px Oswald', 'ӨҮ₮')])
+        .catch(() => {}), 8000);
+    }
+    if (disposed) return;
+    paint();
+    fitName();
+    await raf2();
+    if (!disposed) docEl.dataset.screenReady = '1';
+  })();
+
+  return () => {
+    disposed = true;
+    unsub();
+    clearTimeout(idleT);
+    document.removeEventListener('keydown', onKey);
+    document.removeEventListener('visibilitychange', onVis);
+    document.removeEventListener('mousemove', onMove);
+    window.removeEventListener('resize', onResize);
+    try { if (wake) wake.release(); } catch { /* ignore */ }
+    view.remove();
+    cleanup();
+    document.body.classList.remove('pub-idle', 'scr-mode');
+    store.setInterval(20000);
+  };
+}
+
 // ---------- хуудас ----------
 export default async function render(root, params = {}) {
   const opt = readOptions((params && params.query) || {});
@@ -276,6 +507,7 @@ export default async function render(root, params = {}) {
   delete docEl.dataset.screenReady;
   await withTimeout(cssReady, 6000);
   if (!onScreenRoute()) { link.remove(); restoreDoc(); return null; }
+  if (opt.scene === 'champion') return championScene(root, opt, () => { link.remove(); restoreDoc(); });
 
   const clock = screenClock(opt);
   let disposed = false;
